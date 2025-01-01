@@ -2,9 +2,9 @@
 
 .PHONY : all clean install_bootstrap install_stage2 install
 
-all : bootstrap stage2
-
 BUILD_DIR = build
+
+all : $(BUILD_DIR)/bootstrap $(BUILD_DIR)/stage2
 
 $(BUILD_DIR)/bootstrap : bootstrap.asm
 	mkdir -p $(BUILD_DIR)
