@@ -22,9 +22,9 @@ clean :
 DRIVE = test/drive
 
 install_bootstrap :
-	dd if=bootstrap of=$(DRIVE) bs=446 count=1 conv=notrunc
+	dd if=$(BUILD_DIR)/bootstrap of=$(DRIVE) bs=446 count=1 conv=notrunc
 
 install_stage2 :
-	dd if=stage2 of=$(DRIVE) bs=512 count=51 conv=notrunc seek=1
+	dd if=$(BUILD_DIR)/stage2 of=$(DRIVE) bs=512 count=51 conv=notrunc seek=1
 
 install : install_bootstrap install_stage2
