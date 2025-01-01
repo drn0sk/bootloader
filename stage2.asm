@@ -134,17 +134,17 @@ finally:	; drive number in dl
 	string %1,%str(%1)
 %endmacro
 
-%defstr BOOTLOADER_PATH_STRING BOOTLOADER_PATH
+%defstr BOOTLOADER_STRING BOOTLOADER
 
-string file_too_long_msg,"The file '",BOOTLOADER_PATH_STRING,"' is too long.",0xa,0xd
+string file_too_long_msg,"The file '",BOOTLOADER_STRING,"' is too long.",0xa,0xd
 
-string file_not_found_msg,"Could not find the file: '",BOOTLOADER_PATH_STRING,"'",0xa,0xd
+string file_not_found_msg,"Could not find the file: '",BOOTLOADER_STRING,"'",0xa,0xd
 
 string error_msg,"ERROR",0xa,0xd
 
 string press_key,"[Press any key to restart]"
 
-string filepath,BOOTLOADER_PATH_STRING
+string filepath,BOOTLOADER_STRING
 
 %include "disk_read.asm"
 
