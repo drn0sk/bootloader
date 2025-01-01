@@ -12,7 +12,7 @@ $(BUILD_DIR)/bootstrap : bootstrap.asm
 
 BOOTLOADER_PATH = /Bootloader.bin
 
-$(BUILD_DIR)/stage2 : stage2.asm disk_read.asm fat16.asm paths.asm print.asm
+$(BUILD_DIR)/stage2 : stage2.asm disk_read.asm fat16.asm paths.asm print.asm string.asm
 	mkdir -p $(BUILD_DIR)
 	nasm -f bin -o $(BUILD_DIR)/stage2 -d'BOOTLOADER=$(BOOTLOADER_PATH)' stage2.asm
 
