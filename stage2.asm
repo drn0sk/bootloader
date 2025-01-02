@@ -2,24 +2,11 @@ BITS 16
 	org 0x1500
 	segment .text
 _start:
-	xor ax,ax
-	mov ss,ax
-	mov sp,0x1500
-	mov ds,ax
-	mov es,ax
-	mov si,0x7C00
-	mov di,0x1500
-	mov cx,end-_start
-	cld
-	rep movsb
-	jmp 0x00:relocated
-relocated:
 	mov ax,cs
 	mov ds,ax
 	mov es,ax
 	mov fs,ax
 	mov gs,ax
-	xor ax,ax
 	mov ss,ax
 	mov sp,0x1500
 	push dx
@@ -63,16 +50,9 @@ exit_error:
 	mov cx,error_msg_len
 	call print
 	int 0x18
-	mov bp,press_key
-	mov cx,press_key_len
-	call print
-	xor ah,ah
-	int 0x16	; wait for any keypress
 .reboot	jmp 0xFFFF:0	; reboot
 .hlt	hlt		; if that fails just halt
 	jmp .hlt	; halt again if NMI
-
-
 
 ; LBA of partition to load in eax
 fat16:
@@ -113,34 +93,22 @@ fat16:
 	pop eax
 	jmp finally
 
-
 ; LBA of partition to load in eax
 ext2:
 	jmp exit_error	; not yet implemented
-
 
 finally:	; drive number in dl
 		; starting LBA of partition in eax
 	jmp 0x00:0x7C00
 
 %include "print.asm"
-
 %include "string.asm"
-
 %defstr BOOTLOADER_STRING BOOTLOADER
-
 string file_too_long_msg,"The file '",BOOTLOADER_STRING,"' is too long.",0xa,0xd
-
 string file_not_found_msg,"Could not find the file: '",BOOTLOADER_STRING,"'",0xa,0xd
-
 string error_msg,"ERROR",0xa,0xd
-
 string press_key,"[Press any key to restart]"
-
 string filepath,BOOTLOADER_STRING
-
 %include "disk_read.asm"
-
 %include "fat16.asm"
-
 end:
