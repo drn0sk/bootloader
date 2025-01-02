@@ -2,25 +2,30 @@ BITS 16
 	org 0x7C00
 	segment .text
 _start:
-	jmp 0x00:.cs0
-.cs0	mov ax,cs
+	; make sure cs is zero
+	jmp 0x00:cs_zero
+%include "print.asm"
+%include "string.asm"
+%include "disk_read.asm"
+cs_zero:		; cs = 0
+	mov ax,cs
 	mov ds,ax
 	mov es,ax
-	mov ss,0x7000
-	xor sp,sp
+	mov ax,0x7000
+	mov ss,ax
+	xor sp,sp	; stack points to the end of conventional memory
 	push dx
 	call installation_check
 	jc exit_error
 	pop bx
 	push bx
-	mov cx,51
+	mov cx,51	; load 51 sectors
 	xor edx,edx
-	mov eax,1
-	mov es,0
-	mov di,0x1500
+	mov eax,1	; at LBA 1
+	mov di,0x1500	; to 0:0x1500 (es was set to cs which is 0)
 	call read
 	jc exit_error
-	pop dx
+	pop dx		; drive number in dl
 	jmp 0x00:0x1500
 exit_error:
 	mov bp,error_msg
@@ -31,8 +36,5 @@ exit_error:
 .hlt	hlt		; if that fails just halt
 	jmp .hlt	; halt again if NMI
 
-%include "print.asm"
-%include "string.asm"
-%include "disk_read.asm"
 ; data
 string error_msg,"ERROR",0xa,0xd
