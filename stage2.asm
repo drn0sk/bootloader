@@ -110,5 +110,5 @@ string error_msg,"ERROR",0xa,0xd
 string press_key,"[Press any key to restart]"
 string filepath,BOOTLOADER_STRING
 %include "disk_read.asm"
-%include "fat16.asm"
+%include "fs.asm"
 end:
