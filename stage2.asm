@@ -91,6 +91,7 @@ fat16:
 	jc exit_error
 	pop dx
 	pop eax
+	mov cx,1
 	jmp finally
 
 ; LBA of partition to load in eax
@@ -99,6 +100,7 @@ ext2:
 
 finally:	; drive number in dl
 		; starting LBA of partition in eax
+		; filesystem type in cx (1 for fat16, ...)
 	jmp 0x00:0x7C00
 
 %include "print.asm"
