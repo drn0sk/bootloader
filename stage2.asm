@@ -109,7 +109,6 @@ finally:	; drive number in dl
 string file_too_long_msg,"The file '",BOOTLOADER_STRING,"' is too long.",0xa,0xd
 string file_not_found_msg,"Could not find the file: '",BOOTLOADER_STRING,"'",0xa,0xd
 string error_msg,"ERROR",0xa,0xd
-string press_key,"[Press any key to restart]"
 string filepath,BOOTLOADER_STRING
 %include "disk_read.asm"
 %include "fs.asm"
