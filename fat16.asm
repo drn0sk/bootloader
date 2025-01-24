@@ -397,6 +397,7 @@ _fat16_find_dir_entry_in_root_dir:
 	pop cx
 	jnc .exit	; file found
 	test bp,bp
+	stc
 	jnz .exit	; some error
 	add eax,1
 	adc edx,0
@@ -455,6 +456,7 @@ _fat16_find_dir_entry_in_subdir:
 	mov bp,1
 	jc .exit	; error
 	cmp BYTE [cs:.params+_fat16_find_params.found],0
+	clc
 	jne .exit	; file found
 	xor bp,bp
 	stc
@@ -519,6 +521,7 @@ _fat16_find_dir_entry_in_clust:
 .err	test bp,bp
 	jz .cont
 	mov ax,1
+	stc
 	jmp .exit	; some error
 .cont	add eax,1
 	adc edx,0
@@ -750,7 +753,9 @@ _fat16_for_each_clust_in_chain:	; drive number in bl
 	push bx
 	jnc .cont
 	test ax,ax
+	stc
 	jnz .exit
+	clc
 	jmp .done
 .cont	mov eax,2
 	mul cx
