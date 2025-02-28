@@ -1,4 +1,5 @@
 %define FAT16 1
+%include "fat16.asm"
 ; other filesystems
 
 %define init			WORD [cs:init_ptr]
