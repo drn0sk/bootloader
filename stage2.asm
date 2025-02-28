@@ -57,7 +57,6 @@ exit_error:
 %include "print.asm"
 %include "string.asm"
 %include "disk_read.asm"
-%include "filesystems.asm"
 %include "fs.asm"
 
 f16:
