@@ -1,5 +1,5 @@
-%ifndef FAT16
-	%define FAT16
+%ifndef FAT16_INCLUDED
+	%define FAT16_INCLUDED
 	segment .text
 fat16:
 .initialized		db	0
@@ -911,5 +911,5 @@ _fat16_load_file_from_dir_entry:	; drive number in bl
 
 _fat16_misc_buff times 512 db 0
 
-; FAT16
+; FAT16_INCLUDED
 %endif
