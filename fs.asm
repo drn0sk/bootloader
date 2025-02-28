@@ -1,4 +1,5 @@
-%define FAT16 1
+%define FAT16	1
+%define EXT2	2
 ; other filesystems
 
 %define init			WORD [cs:init_ptr]
@@ -28,7 +29,11 @@ _fs_init:	; filesystem type in cx
 	jne .notf16
 	_set_fs_ptrs fat16
 	ret
-.notf16:
+.notf16	cmp cx,EXT2
+	jne .note2
+	_set_fs_ptrs ext2
+	ret
+.note2:
 	; add more filesystems
 	stc
 	ret

@@ -67,7 +67,12 @@ f16:
 	jmp load
 
 ext2:
-	jmp exit_error	; not yet implemented
+	set_fs EXT2
+	jc exit_error
+	push WORD EXT2
+	jmp load
+
+; ... more filesystems?
 
 ; LBA of partition to load in eax
 load:
@@ -108,7 +113,7 @@ load:
 	pop eax
 finally:	; drive number in dl
 		; starting LBA of partition in eax
-		; filesystem type in cx (FAT16 (1) for fat16, ...)
+		; filesystem type in cx (FAT16 (1) for fat16, EXT2 (2) for ext2, ...)
 	jmp 0x00:0x7C00
 
 %defstr BOOTLOADER_STRING BOOTLOADER
