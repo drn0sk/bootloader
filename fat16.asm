@@ -1,7 +1,7 @@
 %ifndef FAT16
 	%define FAT16
 	segment .text
-FAT:
+fat16:
 .initialized		db	0
 .file_size		dd	0
 .first_data_sect	dd	0
@@ -45,10 +45,12 @@ struc fat_BS
 .part_sig	resb 2
 endstruc
 
+
+
 fat16_init:	; LBA of partition in eax
 		; drive number in bl
 		; carry flag set on error
-		; on success FAT.initialized is set to non-zero value
+		; on success fat16.initialized is set to non-zero value
 	push es
 	push bx
 	push eax
@@ -63,38 +65,38 @@ fat16_init:	; LBA of partition in eax
 	movzx ax,[cs:_fat16_misc_buff+fat_BS.sect_per_clust]
 	xor edx,edx
 	mul WORD [cs:_fat16_misc_buff+fat_BS.bytes_per_sect]
-	mov WORD [cs:FAT.bytes_per_clust],ax
-	mov WORD [cs:FAT.bytes_per_clust+2],dx
+	mov WORD [cs:fat16.bytes_per_clust],ax
+	mov WORD [cs:fat16.bytes_per_clust+2],dx
 	div WORD [cs:bytes_per_sect]
-	mov [cs:FAT.sect_per_clust],ax
+	mov [cs:fat16.sect_per_clust],ax
 	xor ax,ax
 	mov cx,1
 	test dx,dx
 	cmovnz ax,cx
-	add [cs:FAT.sect_per_clust],ax
-	mov dx,[cs:FAT.sect_per_clust]
+	add [cs:fat16.sect_per_clust],ax
+	mov dx,[cs:fat16.sect_per_clust]
 	mov ax,0xFFFF
 	cmovc dx,ax
-	mov [cs:FAT.sect_per_clust],dx
+	mov [cs:fat16.sect_per_clust],dx
 	xor eax,eax
 	mov ax,[cs:_fat16_misc_buff+fat_BS.reserved_sects]
 	xor edx,edx
 	mul WORD [cs:_fat16_misc_buff+fat_BS.bytes_per_sect]
 	div WORD [cs:bytes_per_sect]
-	mov DWORD [cs:FAT.first_fat_sect],eax
-	mov WORD [cs:FAT.fat_off],dx
+	mov DWORD [cs:fat16.first_fat_sect],eax
+	mov WORD [cs:fat16.fat_off],dx
 	mov ax,[cs:_fat16_misc_buff+fat_BS.table_size]
 	xor edx,edx
 	mul WORD [cs:_fat16_misc_buff+fat_BS.bytes_per_sect]
-	mov WORD [cs:FAT.fat_size_bytes],ax
-	mov WORD [cs:FAT.fat_size_bytes+2],dx
+	mov WORD [cs:fat16.fat_size_bytes],ax
+	mov WORD [cs:fat16.fat_size_bytes+2],dx
 	div WORD [cs:bytes_per_sect]
-	mov WORD [cs:FAT.fat_size_sects],ax
+	mov WORD [cs:fat16.fat_size_sects],ax
 	test dx,dx
 	jz .done_rounding
-	add WORD [cs:FAT.fat_size_sects],1
+	add WORD [cs:fat16.fat_size_sects],1
 	jnc .done_rounding
-	mov WORD [cs:FAT.fat_size_sects],0xFFFF
+	mov WORD [cs:fat16.fat_size_sects],0xFFFF
 .done_rounding:
 	xor ecx,ecx
 	mov cx,[cs:_fat16_misc_buff+fat_BS.root_entries]
@@ -106,10 +108,10 @@ fat16_init:	; LBA of partition in eax
 	shr edx,16
 	div WORD [cs:bytes_per_sect]
 	mov cx,ax
-	mov WORD [cs:FAT.root_size],cx
+	mov WORD [cs:fat16.root_size],cx
 	xor edx,edx
 	mov ax,[cs:_fat16_misc_buff+fat_BS.table_count]
-	mul WORD [cs:FAT.fat_size_sects]
+	mul WORD [cs:fat16.fat_size_sects]
 	shl edx,16
 	mov dx,ax
 	pop eax
@@ -117,23 +119,23 @@ fat16_init:	; LBA of partition in eax
 	add eax,edx
 	mov edx,0
 	adc edx,0
-	mov edi,[cs:FAT.first_fat_sect]
+	mov edi,[cs:fat16.first_fat_sect]
 	add eax,edi
 	adc edx,0
-	mov DWORD [cs:FAT.first_root_sect],eax
-	mov DWORD [cs:FAT.root_sect_high],edx
-	mov DWORD [cs:FAT.first_data_sect],eax
-	mov DWORD [cs:FAT.data_sect_high],edx
+	mov DWORD [cs:fat16.first_root_sect],eax
+	mov DWORD [cs:fat16.root_sect_high],edx
+	mov DWORD [cs:fat16.first_data_sect],eax
+	mov DWORD [cs:fat16.data_sect_high],edx
 	movzx edi,cx
-	add DWORD [cs:FAT.first_data_sect],edi
-	adc DWORD [cs:FAT.data_sect_high],0
+	add DWORD [cs:fat16.first_data_sect],edi
+	adc DWORD [cs:fat16.data_sect_high],0
 	pop ebx
 	push ebx
 	mov edi,ebx
-	add [cs:FAT.first_fat_sect],ebx
-	adc DWORD [cs:FAT.fat_sect_high],0
+	add [cs:fat16.first_fat_sect],ebx
+	adc DWORD [cs:fat16.fat_sect_high],0
 	clc
-	mov BYTE [cs:FAT.initialized],0x01
+	mov BYTE [cs:fat16.initialized],0x01
 .exit:
 	pop eax
 	pop bx
@@ -142,7 +144,62 @@ fat16_init:	; LBA of partition in eax
 
 %include "paths.asm"
 
-fat16_find_dir_entry_absolute:
+fat16_load_file:
+fat16_load_file_absolute:	; drive number in bl
+				; ds:si -> path
+				; cx is the length of the path
+				; es:di -> buffer big enough to hold file
+				; Carry Flag (CF) set on error
+	push es
+	push di
+	call _fat16_find_dir_entry_absolute
+	jnc .load
+	ret
+.load	push es
+	pop ds
+	mov si,di
+	pop di
+	pop es
+	jmp _fat16_load_file_from_dir_entry
+
+fat16_load_file_relative:	; drive number in bl
+				; ds:si -> path
+				; cx is the length of the path
+				; es:di -> directory entry of parent
+				; fs:dx -> buffer big enough to hold file
+				; Carry Flag (CF) set on error
+	call _fat16_find_dir_entry_relative
+	jnc .load
+	ret
+.load	push es
+	pop ds
+	mov si,di
+	push fs
+	pop es
+	mov di,dx
+	jmp _fat16_load_file_from_dir_entry
+
+
+fat16_get_file_size:
+			; drive number in bl
+			; ds:si -> path
+			; cx is the length of the path
+			; returns file size in eax
+			; Carry Flag (CF) set on error
+			;  if bp is zero, the file was not found
+			;  if bp is nonzero, there was some other error
+	push cs
+	pop es
+	mov di,_fat16_misc_buff
+	call _fat16_find_dir_entry_absolute
+	jc .exit
+	mov eax,[cs:_fat16_misc_buff+28]
+	clc
+.exit	ret
+
+_fat16_get_info:
+_fat16_get_info_absolute:
+_fat16_find_dir_entry_absolute:
 			; drive number in bl
 			; ds:si -> path
 			; cx is the length of the path
@@ -151,7 +208,7 @@ fat16_find_dir_entry_absolute:
 			; Carry Flag (CF) set on error
 			;  if bp is zero, the file was not found
 			;  if bp is nonzero, there was some other error
-	cmp BYTE [cs:FAT.initialized],0
+	cmp BYTE [cs:fat16.initialized],0
 	jne .start
 	mov bp,1
 	stc
@@ -189,12 +246,13 @@ fat16_find_dir_entry_absolute:
 	jz .exit
 	pop edx
 	pop ax
-	jmp fat16_find_dir_entry_relative
+	jmp _fat16_find_dir_entry_relative
 .exit	pop edx
 	pop ax
 	ret
 
-fat16_find_dir_entry_relative:
+_fat16_get_info_relative:
+_fat16_find_dir_entry_relative:
 			; drive number in bl
 			; ds:si -> path
 			; cx is the length of the path
@@ -205,7 +263,7 @@ fat16_find_dir_entry_relative:
 			; Carry Flag (CF) set on error
 			;  if bp is zero, the file was not found
 			;  if bp is nonzero, there was some other error
-	cmp BYTE [cs:FAT.initialized],0
+	cmp BYTE [cs:fat16.initialized],0
 	jne .start
 	mov bp,1
 	stc
@@ -217,7 +275,7 @@ fat16_find_dir_entry_relative:
 	stc
 	jz .exit
 	cmp BYTE [ds:si],'/'
-	je fat16_find_dir_entry_absolute
+	je _fat16_find_dir_entry_absolute
 .loop	push es
 	push di
 	call path_next_part
@@ -247,127 +305,6 @@ fat16_find_dir_entry_relative:
 	pop ax
 	ret
 
-;__fat16_find_dir_entry_absolute:
-;			; drive number in bl
-;			; ds:si -> array of pointers to file or dir names
-;			;  (i.e. [ds:si+2] is the offset to the 2nd name
-;			;   with segment ds)
-;			; fs:bp -> word array of lengths of the names
-;			;  (terminated by 0)
-;			; es:di -> 32 byte buffer to return the
-;			;  directory entry
-;			; Carry Flag (CF) set on error
-;			;  if bp is zero, the file was not found
-;			;  if bp is nonzero, there was some other error
-;	cmp BYTE [cs:FAT.initialized],0
-;	jne .start
-;	mov bp,1
-;	stc
-;	ret
-;.start	push cx
-;	push ax
-;	push ds
-;	push si
-;	push fs
-;	push bp
-;	mov cx,[fs:bp]
-;	test cx,cx
-;	jz .none
-;	mov si,[ds:si]
-;	call _fat16_find_dir_entry_in_root_dir
-;	jnc .next
-;	pop ax
-;	jmp .err
-;.next	pop bp
-;	pop fs
-;	pop si
-;	pop ds
-;	mov ax,ds
-;	shr ax,12
-;	add si,2
-;	adc ax,0
-;	shl ax,12
-;	mov ds,ax
-;	mov ax,fs
-;	shr ax,12
-;	add bp,2
-;	adc ax,0
-;	shl ax,12
-;	mov fs,ax
-;	pop ax
-;	pop cx
-;	jmp __fat16_find_dir_entry_relative
-;.none	pop bp
-;.err	pop fs
-;	pop si
-;	pop ds
-;	pop ax
-;	pop cx
-;	ret
-;
-;__fat16_find_dir_entry_relative:
-;			; drive number in bl
-;			; ds:si -> array of pointers to file or dir names
-;			;  (i.e. [ds:si+2] is the offset to the 2nd name
-;			;   with segment ds)
-;			; fs:bp -> word array of lengths of the names
-;			;  (terminated by 0)
-;			; es:di -> 32 byte buffer
-;			;   on input: contains the directory entry of the
-;			;  parent directory
-;			;   on output: returns the directory entry
-;			; Carry Flag (CF) set on error
-;			;  if bp is zero, the file was not found
-;			;  if bp is nonzero, there was some other error
-;	cmp BYTE [cs:FAT.initialized],0
-;	jne .start
-;	mov bp,1
-;	stc
-;	ret
-;.start	push cx
-;	push ax
-;	push ds
-;	push si
-;	push fs
-;	push bp
-;.loop	mov cx,[fs:bp]
-;	test cx,cx
-;	jz .done
-;	mov si,[ds:si]
-;	call _fat16_find_dir_entry_in_subdir
-;	jnc .next
-;	pop ax
-;	jmp .err
-;.next	pop bp
-;	pop fs
-;	pop si
-;	pop ds
-;	mov ax,ds
-;	shr ax,12
-;	add si,2
-;	adc ax,0
-;	shl ax,12
-;	mov ds,ax
-;	mov ax,fs
-;	shr ax,12
-;	add bp,2
-;	adc ax,0
-;	shl ax,12
-;	mov fs,ax
-;	push ds
-;	push si
-;	push fs
-;	push bp
-;	jmp .loop
-;.done	clc
-;	pop bp
-;.err	pop fs
-;	pop si
-;	pop ds
-;	pop ax
-;	pop cx
-;	ret
-
 ; gets the directory entry for a file or directory in the root directory
 _fat16_find_dir_entry_in_root_dir:	
 			; drive number in bl
@@ -378,7 +315,7 @@ _fat16_find_dir_entry_in_root_dir:
 			; Carry Flag (CF) set on error
 			;  if bp is zero, the file was not found
 			;  if bp is nonzero, there was some other error
-	cmp BYTE [cs:FAT.initialized],0
+	cmp BYTE [cs:fat16.initialized],0
 	jne .start
 	mov bp,1
 	stc
@@ -386,9 +323,9 @@ _fat16_find_dir_entry_in_root_dir:
 .start	push eax
 	push edx
 	push cx
-	mov eax,[cs:FAT.first_root_sect]
-	mov edx,[cs:FAT.root_sect_high]
-	mov cx,[cs:FAT.root_size]
+	mov eax,[cs:fat16.first_root_sect]
+	mov edx,[cs:fat16.root_sect_high]
+	mov cx,[cs:fat16.root_size]
 .loop	pop bp
 	push bp
 	push cx
@@ -429,7 +366,7 @@ _fat16_find_dir_entry_in_subdir:
 			; Carry Flag (CF) set on error
 			;  if bp is zero, the file was not found
 			;  if bp is nonzero, there was some other error
-	cmp BYTE [cs:FAT.initialized],0
+	cmp BYTE [cs:fat16.initialized],0
 	jne .start
 	mov bp,1
 	stc
@@ -472,7 +409,7 @@ _fat16_find_dir_entry_in_clust:
 			; drive number in bl
 			; cluster number in cx
 			; es:di -> _fat16_find_params
-	cmp BYTE [cs:FAT.initialized],0
+	cmp BYTE [cs:fat16.initialized],0
 	jne .start
 	mov ax,1
 	stc
@@ -491,16 +428,16 @@ _fat16_find_dir_entry_in_clust:
 	mov ax,[es:di+_fat16_find_params.dir_entry_seg]
 	mov di,[es:di+_fat16_find_params.dir_entry_off]
 	mov es,ax
-	mov ax,[cs:FAT.sect_per_clust]
+	mov ax,[cs:fat16.sect_per_clust]
 	sub cx,2
 	mul cx
 	shl edx,16
 	mov dx,ax
 	mov eax,edx
 	xor edx,edx
-	add eax,[cs:FAT.first_data_sect]
-	adc edx,[cs:FAT.data_sect_high]
-	mov cx,[cs:FAT.sect_per_clust]
+	add eax,[cs:fat16.first_data_sect]
+	adc edx,[cs:fat16.data_sect_high]
+	mov cx,[cs:fat16.sect_per_clust]
 .loop	pop bp
 	push bp
 	push cx
@@ -547,7 +484,7 @@ _fat16_find_dir_entry_in_sector:
 			; Carry Flag (CF) set on error
 			;  if bp is zero, the file was not found
 			;  if bp is nonzero, there was some other error
-	cmp BYTE [cs:FAT.initialized],0
+	cmp BYTE [cs:fat16.initialized],0
 	jne .start
 	mov bp,1
 	stc
@@ -726,7 +663,7 @@ _fat16_for_each_clust_in_chain:	; drive number in bl
 				;  on error if ax nonzero
 				;  Must clear carry flag for success
 				; Carry Flag set on error
-	cmp BYTE [cs:FAT.initialized],0
+	cmp BYTE [cs:fat16.initialized],0
 	jne .start
 	stc
 	ret
@@ -760,7 +697,7 @@ _fat16_for_each_clust_in_chain:	; drive number in bl
 .cont	mov eax,2
 	mul cx
 	div WORD [cs:bytes_per_sect]
-	add dx,[cs:FAT.fat_off]
+	add dx,[cs:fat16.fat_off]
 	jnc .nocar
 	inc eax
 	sub dx,[cs:bytes_per_sect]
@@ -772,8 +709,8 @@ _fat16_for_each_clust_in_chain:	; drive number in bl
 	push di
 	push dx
 	xor edx,edx
-	add eax,[cs:FAT.first_fat_sect]
-	adc edx,[cs:FAT.fat_sect_high]
+	add eax,[cs:fat16.first_fat_sect]
+	adc edx,[cs:fat16.fat_sect_high]
 	push cs
 	pop es
 	mov di,_fat16_misc_buff
@@ -812,7 +749,7 @@ _fat16_load_one_cluster_of_file:
 			; cluster number in cx
 			; es:di -> _fat16_load_params
 			; carry flag set on error
-	cmp BYTE [cs:FAT.initialized],0
+	cmp BYTE [cs:fat16.initialized],0
 	jne .start
 	mov ax,1
 	stc
@@ -832,16 +769,16 @@ _fat16_load_one_cluster_of_file:
 .sec_ok	mov ax,[es:di+_fat16_load_params.buff_seg]
 	mov di,[es:di+_fat16_load_params.buff_off]
 	mov es,ax
-	mov ax,[cs:FAT.sect_per_clust]
+	mov ax,[cs:fat16.sect_per_clust]
 	sub cx,2
 	mul cx
 	shl edx,16
 	mov dx,ax
 	mov eax,edx
 	xor edx,edx
-	add eax,[cs:FAT.first_data_sect]
-	adc edx,[cs:FAT.data_sect_high]
-	mov cx,[cs:FAT.sect_per_clust]
+	add eax,[cs:fat16.first_data_sect]
+	adc edx,[cs:fat16.data_sect_high]
+	mov cx,[cs:fat16.sect_per_clust]
 	sub bp,cx
 	jae .rd_cl
 	add bp,cx
@@ -909,8 +846,8 @@ _fat16_load_one_cluster_of_file:
 	jc .exit
 	mov ax,es
 	shr ax,12
-	add di,[cs:FAT.bytes_per_clust]
-	adc ax,[cs:FAT.bytes_per_clust+2]
+	add di,[cs:fat16.bytes_per_clust]
+	adc ax,[cs:fat16.bytes_per_clust+2]
 	shl ax,12
 	mov es,ax
 	pop si
@@ -929,11 +866,11 @@ _fat16_load_one_cluster_of_file:
 	pop ds
 	retf
 
-fat16_load_file:		; drive number in bl
-				; ds:si -> directory entry of file to load
-				; es:di -> buffer big enough to hold file
-				; Carry Flag set on error
-	cmp BYTE [cs:FAT.initialized],0
+_fat16_load_file_from_dir_entry:	; drive number in bl
+					; ds:si -> directory entry of file to load
+					; es:di -> buffer big enough to hold file
+					; Carry Flag set on error
+	cmp BYTE [cs:fat16.initialized],0
 	jne .start
 	stc
 	ret
