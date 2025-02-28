@@ -44,14 +44,14 @@ fat16:
 	mov ecx,[cs:config_len]
 	mov bp,end
 	call print
-	jmp exit.hlt
+	jmp exit
 
 exit_error:
 	mov bp,error_msg
 	mov cx,error_msg_len
 	call print
-	int 0x18
-exit	jmp 0xFFFF:0
+exit	int 0x18
+	jmp 0xFFFF:0
 .hlt	hlt
 	jmp .hlt
 
