@@ -82,8 +82,6 @@ load:
 	push bx
 	call init
 	jc exit_error
-	pop bx
-	push bx
 	mov si,filepath
 	mov cx,filepath_len
 	call get_file_size	; returns file size in eax
@@ -100,9 +98,7 @@ load:
 	mov cx,file_too_long_msg_len
 	call print
 	jmp exit_error
-.sz_ok	pop bx
-	push bx
-	mov si,filepath
+.sz_ok	mov si,filepath
 	mov cx,filepath_len
 	mov di,0x7C00
 	call load_file
