@@ -3,6 +3,7 @@
 	segment .text
 fat16:
 .initialized		db	0
+.drive_num		db	0
 .file_size		dd	0
 .first_data_sect	dd	0
 .data_sect_high		dd	0
@@ -53,6 +54,7 @@ fat16_init:	; LBA of partition in eax
 		; on success fat16.initialized is set to non-zero value
 	push es
 	push bx
+	mov [cs:fat16.drive_num],bl
 	push eax
 	mov cx,1
 	xor edx,edx
@@ -145,8 +147,7 @@ fat16_init:	; LBA of partition in eax
 %include "paths.asm"
 
 fat16_load_file:
-fat16_load_file_absolute:	; drive number in bl
-				; ds:si -> path
+fat16_load_file_absolute:	; ds:si -> path
 				; cx is the length of the path
 				; es:di -> buffer big enough to hold file
 				; Carry Flag (CF) set on error
@@ -162,8 +163,7 @@ fat16_load_file_absolute:	; drive number in bl
 	pop es
 	jmp _fat16_load_file_from_dir_entry
 
-fat16_load_file_relative:	; drive number in bl
-				; ds:si -> path
+fat16_load_file_relative:	; ds:si -> path
 				; cx is the length of the path
 				; es:di -> directory entry of parent
 				; fs:dx -> buffer big enough to hold file
@@ -181,7 +181,6 @@ fat16_load_file_relative:	; drive number in bl
 
 
 fat16_get_file_size:
-			; drive number in bl
 			; ds:si -> path
 			; cx is the length of the path
 			; returns file size in eax
@@ -200,7 +199,6 @@ fat16_get_file_size:
 _fat16_get_info:
 _fat16_get_info_absolute:
 _fat16_find_dir_entry_absolute:
-			; drive number in bl
 			; ds:si -> path
 			; cx is the length of the path
 			; es:di -> 32 byte buffer to return the
@@ -253,7 +251,6 @@ _fat16_find_dir_entry_absolute:
 
 _fat16_get_info_relative:
 _fat16_find_dir_entry_relative:
-			; drive number in bl
 			; ds:si -> path
 			; cx is the length of the path
 			; es:di -> 32 byte buffer
@@ -307,7 +304,6 @@ _fat16_find_dir_entry_relative:
 
 ; gets the directory entry for a file or directory in the root directory
 _fat16_find_dir_entry_in_root_dir:	
-			; drive number in bl
 			; ds:si -> file or directory name
 			; cx has the length of the name
 			; es:di -> 32 byte buffer to return the
@@ -356,7 +352,6 @@ struc _fat16_find_params
 endstruc
 
 _fat16_find_dir_entry_in_subdir:
-			; drive number in bl
 			; ds:si -> file or directory name
 			; cx has the length of the name
 			; es:di -> 32 byte buffer
@@ -406,7 +401,6 @@ _fat16_find_dir_entry_in_subdir:
 .params	times	_fat16_find_params_size db 0
 
 _fat16_find_dir_entry_in_clust:	
-			; drive number in bl
 			; cluster number in cx
 			; es:di -> _fat16_find_params
 	cmp BYTE [cs:fat16.initialized],0
@@ -475,7 +469,6 @@ _fat16_find_dir_entry_in_clust:
 	retf
 
 _fat16_find_dir_entry_in_sector:
-			; drive number in bl
 			; LBA in edx:eax
 			; ds:si -> file or directory name
 			; cx has the length of the name
@@ -489,10 +482,10 @@ _fat16_find_dir_entry_in_sector:
 	mov bp,1
 	stc
 	ret
-.start	push bx
-	push cx
+.start	push cx
 	push es
 	push di
+	mov bl,[cs:fat16.drive_num]
 	push cs
 	pop es
 	mov di,_fat16_misc_buff
@@ -640,7 +633,6 @@ _fat16_find_dir_entry_in_sector:
 	pop es
 	clc
 .exit	pop cx
-	pop bx
 	ret
 .lfn	times	255	db	0
 .long		db	0
@@ -648,12 +640,10 @@ _fat16_find_dir_entry_in_sector:
 .len		dw	0
 .lfn_chrs	db	30,28,24,22,20,18,16,14,9,7,5,3,1
 
-_fat16_for_each_clust_in_chain:	; drive number in bl
-				; starting cluster in cx
+_fat16_for_each_clust_in_chain:	; starting cluster in cx
 				; fs:si -> function
 				;  Called with each cluster number in cx
 				;  for every cluster in chain.
-				;  bl contains the drive number
 				;  Passed es:di, for any other inputs.
 				;   this is passed unmodified, so if
 				;   the called function changes the value
@@ -674,7 +664,6 @@ _fat16_for_each_clust_in_chain:	; drive number in bl
 	push cx
 	push fs
 	push si
-	push bx
 .loop	cmp cx,0xFFF8
 	jae .done
 	cmp cx,1
@@ -682,12 +671,10 @@ _fat16_for_each_clust_in_chain:	; drive number in bl
 	mov [cs:.fn_ptr],si
 	mov [cs:.fn_ptr+2],fs
 	call far [cs:.fn_ptr]
-	pop bx
 	pop si
 	pop fs
 	push fs
 	push si
-	push bx
 	jnc .cont
 	test ax,ax
 	stc
@@ -715,6 +702,7 @@ _fat16_for_each_clust_in_chain:	; drive number in bl
 	pop es
 	mov di,_fat16_misc_buff
 	mov cx,1
+	mov bl,[cs:fat16.drive_num]
 	call read
 	pop dx
 	pop di
@@ -724,8 +712,7 @@ _fat16_for_each_clust_in_chain:	; drive number in bl
 	mov cx,[cs:_fat16_misc_buff+bp]
 	jmp .loop
 .done	clc
-.exit	pop bx
-	pop si
+.exit	pop si
 	pop fs
 	pop cx
 	pop di
@@ -745,7 +732,6 @@ endstruc
 
 ; loads one cluster of a file to es:di
 _fat16_load_one_cluster_of_file:
-			; drive number in bl
 			; cluster number in cx
 			; es:di -> _fat16_load_params
 			; carry flag set on error
@@ -760,6 +746,7 @@ _fat16_load_one_cluster_of_file:
 	push cx
 	push es
 	push di
+	mov bl,[cs:fat16.drive_num]
 	mov bp,[es:di+_fat16_load_params.buff_len_sect]
 	test bp,bp
 	jnz .sec_ok
@@ -866,8 +853,7 @@ _fat16_load_one_cluster_of_file:
 	pop ds
 	retf
 
-_fat16_load_file_from_dir_entry:	; drive number in bl
-					; ds:si -> directory entry of file to load
+_fat16_load_file_from_dir_entry:	; ds:si -> directory entry of file to load
 					; es:di -> buffer big enough to hold file
 					; Carry Flag set on error
 	cmp BYTE [cs:fat16.initialized],0
