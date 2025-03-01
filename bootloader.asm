@@ -29,15 +29,11 @@ _start	mov bx,cs
 	push bx
 	call init
 	jc exit_error
-	pop bx
-	push bx
 	mov si,config_path
 	mov cx,config_path_len
 	call get_file_size
 	jc exit_error
 	mov [cs:config_len],eax
-	pop bx
-	push bx
 	mov si,config_path
 	mov cx,config_path_len
 	mov di,end
