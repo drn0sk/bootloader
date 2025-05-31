@@ -58,15 +58,18 @@ fat16_init:	; LBA of partition in eax
 	push eax
 	mov cx,1
 	xor edx,edx
-	push cs
+	push WORD [cs:_buff.seg]
 	pop es
-	mov di,_fat16_misc_buff
+	mov di,[cs:_buff.off]
 	call read
 	jc .exit
 	xor eax,eax
-	movzx ax,[cs:_fat16_misc_buff+fat_BS.sect_per_clust]
+	push WORD [cs:_buff.seg]
+	pop es
+	mov bx,[cs:_buff.off]
+	movzx ax,[es:bx+fat_BS.sect_per_clust]
 	xor edx,edx
-	mul WORD [cs:_fat16_misc_buff+fat_BS.bytes_per_sect]
+	mul WORD [es:bx+fat_BS.bytes_per_sect]
 	mov WORD [cs:fat16.bytes_per_clust],ax
 	mov WORD [cs:fat16.bytes_per_clust+2],dx
 	div WORD [cs:bytes_per_sect]
@@ -81,15 +84,15 @@ fat16_init:	; LBA of partition in eax
 	cmovc dx,ax
 	mov [cs:fat16.sect_per_clust],dx
 	xor eax,eax
-	mov ax,[cs:_fat16_misc_buff+fat_BS.reserved_sects]
+	mov ax,[es:bx+fat_BS.reserved_sects]
 	xor edx,edx
-	mul WORD [cs:_fat16_misc_buff+fat_BS.bytes_per_sect]
+	mul WORD [es:bx+fat_BS.bytes_per_sect]
 	div WORD [cs:bytes_per_sect]
 	mov DWORD [cs:fat16.first_fat_sect],eax
 	mov WORD [cs:fat16.fat_off],dx
-	mov ax,[cs:_fat16_misc_buff+fat_BS.table_size]
+	mov ax,[es:bx+fat_BS.table_size]
 	xor edx,edx
-	mul WORD [cs:_fat16_misc_buff+fat_BS.bytes_per_sect]
+	mul WORD [es:bx+fat_BS.bytes_per_sect]
 	mov WORD [cs:fat16.fat_size_bytes],ax
 	mov WORD [cs:fat16.fat_size_bytes+2],dx
 	div WORD [cs:bytes_per_sect]
@@ -101,7 +104,7 @@ fat16_init:	; LBA of partition in eax
 	mov WORD [cs:fat16.fat_size_sects],0xFFFF
 .done_rounding:
 	xor ecx,ecx
-	mov cx,[cs:_fat16_misc_buff+fat_BS.root_entries]
+	mov cx,[es:bx+fat_BS.root_entries]
 	shl ecx,5
 	movzx edx,WORD [cs:bytes_per_sect]
 	dec edx
@@ -112,7 +115,7 @@ fat16_init:	; LBA of partition in eax
 	mov cx,ax
 	mov WORD [cs:fat16.root_size],cx
 	xor edx,edx
-	mov ax,[cs:_fat16_misc_buff+fat_BS.table_count]
+	mov ax,[es:bx+fat_BS.table_count]
 	mul WORD [cs:fat16.fat_size_sects]
 	shl edx,16
 	mov dx,ax
@@ -187,14 +190,21 @@ fat16_get_file_size:
 			; Carry Flag (CF) set on error
 			;  if bp is zero, the file was not found
 			;  if bp is nonzero, there was some other error
-	push cs
+	push es
+	push di
+	push WORD [cs:_buff.seg]
 	pop es
-	mov di,_fat16_misc_buff
+	mov di,[cs:_buff.off]
 	call _fat16_find_dir_entry_absolute
 	jc .exit
-	mov eax,[cs:_fat16_misc_buff+28]
+	push WORD [cs:_buff.seg]
+	pop es
+	mov di,[cs:_buff.off]
+	mov eax,[es:di+28]
 	clc
-.exit	ret
+.exit	pop di
+	pop es
+	ret
 
 _fat16_get_info:
 _fat16_get_info_absolute:
@@ -482,13 +492,14 @@ _fat16_find_dir_entry_in_sector:
 	mov bp,1
 	stc
 	ret
-.start	push cx
+.start	push fs
+	push cx
 	push es
 	push di
 	mov bl,[cs:fat16.drive_num]
-	push cs
+	push WORD [cs:_buff.seg]
 	pop es
-	mov di,_fat16_misc_buff
+	mov di,[cs:_buff.off]
 	mov cx,1
 	call read
 	pop di
@@ -499,19 +510,27 @@ _fat16_find_dir_entry_in_sector:
 .rd_ok	mov BYTE [cs:.long],0
 	mov WORD [cs:.len],0
 	mov WORD [cs:.off],.lfn+255
-	xor bp,bp
-.loop	cmp BYTE [cs:_fat16_misc_buff+bp],0
+	push WORD [cs:_buff.seg]
+	pop fs
+	xor bp,bp	
+.loop	mov bx,[cs:_buff.off]
+	add bx,bp
+	cmp BYTE [fs:bx],0
 	jne .next
 	xor bp,bp
 	stc
 	jmp .exit	; not found
-.next	cmp BYTE [cs:_fat16_misc_buff+bp],0xE5
+.next	mov bx,[cs:_buff.off]
+	add bx,bp
+	cmp BYTE [fs:bx],0xE5
 	jne .used
 	mov BYTE [cs:.long],0
 	mov WORD [cs:.len],0
 	mov WORD [cs:.off],.lfn+255
 	jmp .cont	; skip unused entries
-.used	cmp BYTE [cs:_fat16_misc_buff+bp+11],0x0F
+.used	mov bx,[cs:_buff.off]
+	add bx,bp
+	cmp BYTE [fs:bx+11],0x0F
 	jne .normal
 	push es
 	push di
@@ -519,19 +538,22 @@ _fat16_find_dir_entry_in_sector:
 	pop es
 	mov di,[cs:.off]
 	xor cl,cl
+	push si
+	mov si,[cs:_buff.off]
 .chr_lp	movzx bx,cl
 	mov bl,[cs:.lfn_chrs+bx]
 	add bx,bp
-	cmp WORD [cs:_fat16_misc_buff+bx],0xFFFF
+	cmp WORD [fs:si+bx],0xFFFF
 	je .nxtchr
-	cmp BYTE [cs:_fat16_misc_buff+bx],0x00
+	cmp BYTE [fs:si+bx],0x00
 	je .nxtchr
 	dec di
-	mov bl,[cs:_fat16_misc_buff+bx]
+	mov bl,[fs:si+bx]
 	mov BYTE [es:di],bl
 .nxtchr	inc cl
 	cmp cl,13
 	jb .chr_lp
+	pop si
 	mov BYTE [cs:.long],1
 	mov [cs:.off],di
 	lea di,[cs:.lfn+255]
@@ -564,7 +586,8 @@ _fat16_find_dir_entry_in_sector:
 	pop ds
 	push cs
 	pop es
-	lea si,[cs:_fat16_misc_buff+bp+11]
+	mov si,[cs:_buff.off]
+	lea si,[fs:si+bp+11]
 	mov di,[cs:.off]
 	mov cx,3
 	std
@@ -623,7 +646,8 @@ _fat16_find_dir_entry_in_sector:
 	push si
 	push cs
 	pop ds
-	lea si,[cs:_fat16_misc_buff+bp]
+	mov si,[cs:_buff.off]
+	lea si,[fs:si+bp]
 	mov cx,32
 	cld
 	rep movsb
@@ -633,6 +657,7 @@ _fat16_find_dir_entry_in_sector:
 	pop es
 	clc
 .exit	pop cx
+	pop fs
 	ret
 .lfn	times	255	db	0
 .long		db	0
@@ -698,9 +723,9 @@ _fat16_for_each_clust_in_chain:	; starting cluster in cx
 	xor edx,edx
 	add eax,[cs:fat16.first_fat_sect]
 	adc edx,[cs:fat16.fat_sect_high]
-	push cs
+	push WORD [cs:_buff.seg]
 	pop es
-	mov di,_fat16_misc_buff
+	mov di,[cs:_buff.off]
 	mov cx,1
 	mov bl,[cs:fat16.drive_num]
 	call read
@@ -709,7 +734,12 @@ _fat16_for_each_clust_in_chain:	; starting cluster in cx
 	pop es
 	jc .exit
 	mov bp,dx
-	mov cx,[cs:_fat16_misc_buff+bp]
+	add bp,[cs:_buff.off]
+	push fs
+	push WORD [cs:_buff.seg]
+	pop fs
+	mov cx,[fs:bp]
+	pop fs
 	jmp .loop
 .done	clc
 .exit	pop si
@@ -804,9 +834,9 @@ _fat16_load_one_cluster_of_file:
 	clc
 	je .exit
 	mov cx,1
-	push cs
+	push WORD [cs:_buff.seg]
 	pop es
-	lea di,[cs:_fat16_misc_buff]
+	mov di,[cs:_buff.off]
 	call read
 	mov ax,1
 	jc .exit
@@ -814,9 +844,9 @@ _fat16_load_one_cluster_of_file:
 	mov ax,[ds:si+_fat16_load_params.buff_seg]
 	mov es,ax
 	mov di,[ds:si+_fat16_load_params.buff_off]
-	push cs
+	push WORD [cs:_buff.seg]
 	pop ds
-	lea si,[cs:_fat16_misc_buff]
+	mov si,[cs:_buff.off]
 	cld
 	rep movsb
 	pop si
@@ -894,8 +924,6 @@ _fat16_load_file_from_dir_entry:	; ds:si -> directory entry of file to load
 	pop edx
 	ret
 .params	times	_fat16_load_params_size db 0
-
-_fat16_misc_buff times 512 db 0
 
 ; FAT16_INCLUDED
 %endif

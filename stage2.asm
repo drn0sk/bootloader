@@ -22,6 +22,12 @@ _start:
 	jc exit_error
 	mov si,0x01BE
 	mov cx,4
+	pop dx
+	sub sp,[cs:bytes_per_sect]
+	mov di,sp
+	push dx
+	push ss
+	pop ds
 find_part:
 	test BYTE [cs:0x7c00+si],0x80
 	jz .continue
@@ -60,6 +66,9 @@ exit_error:
 %include "fs.asm"
 
 f16:
+	; a buffer that is a sector long at the bottom of the stack (ss:0x1500-[bytes_per_sect])
+	; ds is already set to ss
+	mov si,di
 	set_fs FAT16
 	jc exit_error
 	push WORD FAT16
@@ -101,6 +110,7 @@ load:
 	pop dx
 	pop cx
 	pop eax
+	add sp,[cs:bytes_per_sect]
 finally:	; drive number in dl
 		; starting LBA of partition in eax
 		; filesystem type in cx (FAT16 (1) for fat16, ...)
