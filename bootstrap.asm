@@ -19,7 +19,10 @@ cs_zero:		; cs = 0
 	jc exit_error
 	pop bx
 	push bx
-	mov cx,51	; load 51 sectors
+	xor dx,dx
+	mov ax,0x7C00-0x1500 ; this is the max amount of bytes we can load
+	div WORD [cs:bytes_per_sect]
+	mov cx,ax	; we want to load ax (the quotient) sectors
 	xor edx,edx
 	mov eax,1	; at LBA 1
 	mov di,0x1500	; to 0:0x1500 (es was set to cs which is 0)

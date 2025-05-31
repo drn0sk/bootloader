@@ -20,12 +20,19 @@ get_file_sz_ptr		dw	0
 	mov WORD [cs:get_file_sz_ptr],%1_get_file_size
 %endmacro
 
+; pass a pointer to a buffer of size bytes_per_sect in ds:si
 %macro set_fs 1
 	mov cx,%1
 	call _fs_init
 %endmacro
 
-_fs_init:	; filesystem type in cx
+_buff:
+.seg	dw	0
+.off	dw	0
+
+_fs_init:	; filesystem type in cx, pointer to buffer of size bytes_per_sect in ds:si
+	mov WORD [_buff.seg],ds
+	mov WORD [_buff.off],si
 	clc
 	cmp cx,FAT16
 	jne .notf16
