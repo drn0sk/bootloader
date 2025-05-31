@@ -7,7 +7,6 @@ BITS 16
 %include "print.asm"
 %include "string.asm"
 %include "disk_read.asm"
-%include "filesystems.asm"
 %include "fs.asm"
 
 _start	mov bx,cs
@@ -21,6 +20,15 @@ _start	mov bx,cs
 	push dx
 	call installation_check
 	jc exit_error
+	pop dx
+	pop eax
+	sub sp,[cs:bytes_per_sect]
+	mov si,sp
+	push eax
+	push dx
+	push ss
+	pop ds
+	; ds:si points to buffer of size bytes_per_sect on stack
 	set_fs cx
 	jc exit_error
 	pop bx
