@@ -209,6 +209,7 @@ ext2_init:
 	jc .exit
 	mov [cs.ext2.inode_size],ax
 .v0	clc
+	mov BYTE [cs:ext2.initialized],0x01
 .exit	pop eax
 	ret
 
