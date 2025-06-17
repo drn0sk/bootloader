@@ -74,7 +74,7 @@ f16:
 	push WORD FAT16
 	jmp load
 
-ext2:
+e2:
 	set_fs EXT2
 	jc exit_error
 	push WORD EXT2
