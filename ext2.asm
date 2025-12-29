@@ -15,7 +15,7 @@ ext2:
 .inodes_per_group	dd	0
 .num_groups		dd	0
 .bgdt			db	1
-.inode_size		dw	0
+.inode_size		dw	128
 .inode_start		dd	11
 .dir_type_feature	db	0
 
@@ -48,7 +48,7 @@ _load_byte_from_LBA:	; loads a byte at LBA (edx:eax) + byte offset (si) to al
 	jc .exit
 	mov al,[es:di+bx]
 	clc
-.exit	pop bx
+.exit	pop ebx
 	pop cx
 	pop di
 	pop es
@@ -202,7 +202,6 @@ ext2_init:
 	call _load_dword_from_LBA
 	jc .exit
 	mov [cs:ext2.inodes_per_group],eax
-	mov WORD [cs:ext2.inode_size],128
 	pop eax
 	push eax
 	xor edx,edx
@@ -310,7 +309,7 @@ _ext2_find_inode_in_block:
 	ret
 .start	push ecx
 	mov bp,cx
-	shl bp,16
+	shl ebp,16
 	push eax
 	mov ecx,[cs:ext2.sect_per_block]
 	mul ecx
@@ -324,10 +323,13 @@ _ext2_find_inode_in_block:
 	cmp edx,0xFFFF	; remainder should be less than bytes_per_sect
 			; which is a WORD
 	mov bp,2
+	jna .l0
 	stc
-	ja .exit
-	pop ecx
-	mov bp,dx	; remainder <= a WORD
+	pop eax
+	pop edx
+	jmp .exit
+	;pop ecx
+.l0	mov bp,dx	; remainder <= a WORD
 	mov ecx,eax
 	pop eax
 	pop edx
@@ -423,13 +425,12 @@ _ext2_find_inode_in_block:
 	jb .mk_pt
 	mov ecx,ebp
 	shr ecx,16
-	push bp
 	call .check_entry
-	shl edi,16
-	pop di
+	;shl edi,16
+	;mov di,bp
 	jnc .done
-	mov bp,di
-	shr edi,16
+	;mov bp,di
+	;shr edi,16
 .nxt_dr	add bp,[es:di+bp+4]
 	cmp bp,[cs:bytes_per_sect]
 	jae .next_s
@@ -486,10 +487,10 @@ _ext2_find_inode_in_block:
 	mov dx,[es:di+6]
 	jmp .cmp
 .type	mov dl,[es:di+6]
-	cmp cx,dx
+.cmp	cmp cx,dx
 	stc
 	jne .ret	; different length names, so no match
-.cmp	cld
+	cld
 	push es
 	push di
 	add di,8
@@ -505,7 +506,7 @@ _ext2_find_inode_in_block:
 	pop es
 	pop cx
 	pop si
-	pop di
+	pop ds
 	ret
 
 ext2_load_file:
