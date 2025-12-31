@@ -496,9 +496,17 @@ _ext2_find_inode_in_block:
 	xor dx,dx
 	mov ax,[es:di+4]
 	div [cs:bytes_per_sect]
-	add bp,dx
 	movzx ecx,ax
-	pop eax
+	add bp,dx
+	jnc .nc
+	inc ecx
+	sub bp,[cs:bytes_per_sect]
+	jmp .cnt
+.nc	cmp bp,[cs:bytes_per_sect]
+	jb .cnt
+	inc ecx
+	sub bp,[cs:bytes_per_sect]
+.cnt	pop eax
 	pop edx
 	dec ecx
 	add eax,ecx
