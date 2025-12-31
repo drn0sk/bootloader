@@ -375,7 +375,12 @@ _ext2_find_inode_in_block:
 	mov cx,[cs:.partial_entry+6]
 	jmp .rd_pt
 .tp0	mov cl,[cs:.partial_entry+6]
-.rd_pt	sub cx,bx
+.rd_pt	test ch,ch ; filenames longer than 255 bytes not supported
+	jz .len_ok
+	mov bp,3
+	pop ecx
+	jmp .exit
+.len_ok	sub cx,bx
 	pop bx
 	cld
 	push dx
@@ -458,7 +463,12 @@ _ext2_find_inode_in_block:
 .mk_pt	test cx,cx
 	xor bp,bp
 	jz .next_s
-	push es
+	test ch,ch ; filenames longer than 255 bytes not supported
+	jz .ln_ok
+	mov bp,3
+	pop ecx
+	jmp .exit
+.ln_ok	push es
 	push di
 	push ds
 	push si
