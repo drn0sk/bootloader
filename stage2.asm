@@ -20,34 +20,34 @@ _start:
 	mov di,0x7C00
 	call load_partition_table
 	jc exit_error
-	mov si,0x01BE
+	mov di,0x01BE
 	mov cx,4
 	pop dx
 	sub sp,[cs:bytes_per_sect]
-	mov di,sp
+	mov si,sp
 	push dx
 	push ss
 	pop ds
 find_part:
-	test BYTE [cs:0x7c00+si],0x80
+	test BYTE [cs:0x7c00+di],0x80
 	jz .continue
-	mov eax,[cs:0x7c00+si+0x08]
+	mov eax,[cs:0x7c00+di+0x08]
 	xor edx,edx
 	; FAT16 ?
-	cmp BYTE [cs:0x7c00+si+4],0x04
+	cmp BYTE [cs:0x7c00+di+4],0x04
 	je f16
-	cmp BYTE [cs:0x7c00+si+4],0x06
+	cmp BYTE [cs:0x7c00+di+4],0x06
 	je f16
-	cmp BYTE [cs:0x7c00+si+4],0x0E
+	cmp BYTE [cs:0x7c00+di+4],0x0E
 	je f16
 	
 	; EXT2 ?
-	cmp BYTE [cs:0x7c00+si+4],0x83
+	cmp BYTE [cs:0x7c00+di+4],0x83
 	je e2
 	
 	;
 .continue:
-	add si,0x10
+	add di,0x10
 	dec cx
 	jnz find_part
 
@@ -66,9 +66,8 @@ exit_error:
 %include "fs.asm"
 
 f16:
-	; a buffer that is a sector long at the bottom of the stack (ss:0x1500-[bytes_per_sect])
+	; ds:si has a buffer that is a sector long at the bottom of the stack (ss:0x1500-[bytes_per_sect])
 	; ds is already set to ss
-	mov si,di
 	set_fs FAT16
 	jc exit_error
 	push WORD FAT16
