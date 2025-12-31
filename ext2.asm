@@ -462,9 +462,10 @@ _ext2_find_inode_in_block:
 	mov bp,cx
 	jmp .dir_lp
 .mk_pt	test cx,cx
+	jnz .ne
 	xor bp,bp
-	jz .next_s
-	test ch,ch ; filenames longer than 255 bytes not supported
+	jmp .next_s
+.ne	test ch,ch ; filenames longer than 255 bytes not supported
 	jz .ln_ok
 	mov bp,3
 	pop ecx
