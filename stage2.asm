@@ -43,7 +43,7 @@ find_part:
 	
 	; EXT2 ?
 	cmp BYTE [cs:0x7c00+si+4],0x83
-	je ext2
+	je e2
 	
 	;
 .continue:

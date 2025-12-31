@@ -250,7 +250,7 @@ _ext2_find_path_relative:	; ds:si -> path
 				; eax is the inode of the directory to look in (2 to look in the root dir)
 				; returns inode in eax
 				; Carry Flag (CF) set on error
-	cmp BYTE [cs:ext2.initialized],0x01
+	cmp BYTE [cs:ext2.initialized],0
 	jne .start
 	mov bp,1
 	stc
@@ -285,7 +285,7 @@ _ext2_find_inode:	; ds:si -> name
 			; Carry Flag (CF) set on error
 			;  if bp is zero, the file was not found
 			;  if bp is nonzero, there was some other error
-	cmp BYTE [cs:ext2.initialized],0x01
+	cmp BYTE [cs:ext2.initialized],0
 	jne .start
 	mov bp,1
 	stc
@@ -302,7 +302,7 @@ _ext2_find_inode_in_block:
 			; Carry Flag (CF) set on error
 			;  if bp is zero, the file was not found
 			;  if bp is nonzero, there was some other error
-	cmp BYTE [cs:ext2.initialized],0x01
+	cmp BYTE [cs:ext2.initialized],0
 	jne .start
 	mov bp,1
 	stc
@@ -322,9 +322,10 @@ _ext2_find_inode_in_block:
 	div ecx
 	cmp edx,0xFFFF	; remainder should be less than bytes_per_sect
 			; which is a WORD
-	mov bp,2
 	jna .l0
+	; this should never happen
 	stc
+	mov bp,2
 	pop eax
 	pop edx
 	jmp .exit
@@ -338,8 +339,8 @@ _ext2_find_inode_in_block:
 	add eax,[cs:ext2.start_LBA]
 	adc edx,0
 	mov ecx,[cs:ext2.sect_per_block]
-	push ecx
-.s_loop	mov cx,1
+.s_loop	push ecx
+	mov cx,1
 	mov bl,[cs:ext2.drive_num]
 	push WORD [cs:_buff.seg]
 	pop es
@@ -347,6 +348,7 @@ _ext2_find_inode_in_block:
 	call read
 	jnc .rd_ok
 	mov bp,1
+	pop ecx
 	jmp .exit
 .rd_ok	cmp WORD [cs:.partial_len],0
 	je .dir_lp
@@ -364,10 +366,15 @@ _ext2_find_inode_in_block:
 	add si,bp
 	mov bx,[cs:.partial_len]
 	lea di,[cs:.partial_entry+bx]
-	cmp bx,6
-	mov cx,6
+	cmp bx,8
+	mov cx,8
 	jb .rd_pt
-	mov cx,[cs:.partial_entry+4]
+	xor cx,cx
+	cmp BYTE [cs:ext2.dir_type_feature],0
+	jne .tp0
+	mov cx,[cs:.partial_entry+6]
+	jmp .rd_pt
+.tp0	mov cl,[cs:.partial_entry+6]
 .rd_pt	sub cx,bx
 	pop bx
 	cld
@@ -377,7 +384,7 @@ _ext2_find_inode_in_block:
 	cmp cx,dx
 	pop dx
 	ja .part
-	cmp cx,6
+	cmp cx,8
 	ja .full
 	add [cs:.partial_len],cx
 	rep movsb
@@ -396,6 +403,7 @@ _ext2_find_inode_in_block:
 	pop ds
 	pop di
 	pop es
+	xor bp,bp
 	jmp .next_s
 .full	add bp,cx
 	add [cs:.partial_len],cx
@@ -419,10 +427,20 @@ _ext2_find_inode_in_block:
 	mov WORD [cs:.partial_len],0
 .dir_lp	mov cx,[cs:bytes_per_sect]
 	sub cx,bp
-	cmp cx,6
+	cmp cx,8
 	jb .mk_pt
-	cmp cx,[es:di+bp+4]
+	push dx
+	xor dx,dx
+	cmp BYTE [cs:ext2.dir_type_feature],0
+	jne .tp
+	mov dx,WORD [es:di+bp+6]
+	jmp .cm
+.tp	mov dl,BYTE [es:di+bp+6]
+.cm	cmp cx,dx
+	pop dx
 	jb .mk_pt
+	cmp DWORD [es:di+bp],0
+	je .nxt_dr
 	mov ecx,ebp
 	shr ecx,16
 	call .check_entry
@@ -431,11 +449,14 @@ _ext2_find_inode_in_block:
 	jnc .done
 	;mov bp,di
 	;shr edi,16
-.nxt_dr	add bp,[es:di+bp+4]
+.nxt_dr	add di,bp
+	mov bp,[es:di+4]
+	jc .nxt_sb
 	cmp bp,[cs:bytes_per_sect]
-	jae .next_s
+	jae .nxt_sb
 	jmp .dir_lp
 .mk_pt	test cx,cx
+	xor bp,bp
 	jz .next_s
 	push es
 	push di
@@ -456,14 +477,30 @@ _ext2_find_inode_in_block:
 	pop ds
 	pop di
 	pop es
+	xor bp,bp
+	jmp .next_s
+.nxt_sb	push edx
+	push eax
+	sub bp,[es:di+4]
+	xor dx,dx
+	mov ax,[es:di+4]
+	div [cs:bytes_per_sect]
+	add bp,dx
+	movzx ecx,ax
+	pop eax
+	pop edx
+	dec ecx
+	add eax,ecx
+	adc edx,0
 .next_s	add eax,1
 	adc edx,0
 	pop ecx
-	xor bp,bp
 	dec ecx
-	push ecx
 	jnz .s_loop
-.done	clc
+	stc
+	jmp .exit
+.done	pop ecx
+	clc
 .exit	pop ecx
 	ret
 .partial_entry	times 263 db 0
@@ -514,7 +551,7 @@ ext2_load_file_absolute:	; ds:si -> path
 				; cx is the length of the path
 				; es:di -> buffer big enough to hold file
 				; Carry Flag (CF) set on error
-	cmp BYTE [cs:ext2.initialized],0x01
+	cmp BYTE [cs:ext2.initialized],0
 	jne .start
 	mov bp,1
 	stc
@@ -528,7 +565,7 @@ ext2_load_file_relative:	; ds:si -> path
 				; es:di -> any necessary info about parent directory
 				; fs:dx -> buffer big enough to hold file
 				; Carry Flag (CF) set on error
-	cmp BYTE [cs:ext2.initialized],0x01
+	cmp BYTE [cs:ext2.initialized],0
 	jne .start
 	mov bp,1
 	stc
@@ -541,7 +578,7 @@ ext2_get_file_size:		; ds:si -> path
 				; cx is the length of the path
 				; returns file size in eax
 				; Carry Flag (CF) set on error
-	cmp BYTE [cs:ext2.initialized],0x01
+	cmp BYTE [cs:ext2.initialized],0
 	jne .start
 	mov bp,1
 	stc
