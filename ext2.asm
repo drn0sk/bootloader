@@ -380,7 +380,8 @@ _ext2_find_inode_in_block:
 	mov bp,3
 	pop ecx
 	jmp .exit
-.len_ok	sub cx,bx
+.len_ok	add cx,8
+	sub cx,bx
 	pop bx
 	cld
 	push dx
@@ -441,7 +442,8 @@ _ext2_find_inode_in_block:
 	mov dx,WORD [es:di+bp+6]
 	jmp .cm
 .tp	mov dl,BYTE [es:di+bp+6]
-.cm	cmp cx,dx
+.cm	add dx,8
+	cmp cx,dx
 	pop dx
 	jb .mk_pt
 	cmp DWORD [es:di+bp],0
