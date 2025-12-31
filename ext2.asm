@@ -454,11 +454,12 @@ _ext2_find_inode_in_block:
 	jnc .done
 	;mov bp,di
 	;shr edi,16
-.nxt_dr	add di,bp
-	mov bp,[es:di+4]
+.nxt_dr	mov cx,bp
+	add cx,[es:di+4]
 	jc .nxt_sb
-	cmp bp,[cs:bytes_per_sect]
+	cmp cx,[cs:bytes_per_sect]
 	jae .nxt_sb
+	mov bp,cx
 	jmp .dir_lp
 .mk_pt	test cx,cx
 	xor bp,bp
@@ -491,7 +492,6 @@ _ext2_find_inode_in_block:
 	jmp .next_s
 .nxt_sb	push edx
 	push eax
-	sub bp,[es:di+4]
 	xor dx,dx
 	mov ax,[es:di+4]
 	div [cs:bytes_per_sect]
