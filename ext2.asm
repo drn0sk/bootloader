@@ -457,7 +457,7 @@ _ext2_find_inode_in_block:
 	;mov bp,di
 	;shr edi,16
 .nxt_dr	mov cx,bp
-	add cx,[es:di+4]
+	add cx,[es:di+bp+4]
 	jc .nxt_sb
 	cmp cx,[cs:bytes_per_sect]
 	jae .nxt_sb
@@ -496,7 +496,7 @@ _ext2_find_inode_in_block:
 .nxt_sb	push edx
 	push eax
 	xor dx,dx
-	mov ax,[es:di+4]
+	mov ax,[es:di+bp+4]
 	div [cs:bytes_per_sect]
 	movzx ecx,ax
 	add bp,dx
