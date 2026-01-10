@@ -378,6 +378,12 @@ _ext2_find_inode_in_block:
 .rd_pt	test ch,ch ; filenames longer than 255 bytes not supported
 	jz .len_ok
 	mov bp,3
+	pop bx
+	pop cx
+	pop si
+	pop ds
+	pop di
+	pop es
 	pop ecx
 	jmp .exit
 .len_ok	add cx,8
@@ -427,8 +433,11 @@ _ext2_find_inode_in_block:
 	xor bp,bp
 	call .check_entry
 	pop di
-	jnc .done
-	mov bp,di
+	jc .cnt0
+	pop di
+	pop es
+	jmp .done
+.cnt0	mov bp,di
 	pop di
 	pop es
 	mov cx,[cs:.partial_entry+4]
