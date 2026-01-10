@@ -382,15 +382,17 @@ _ext2_find_inode_in_block:
 	jmp .exit
 .len_ok	add cx,8
 	sub cx,bx
-	pop bx
 	cld
 	push dx
 	mov dx,[cs:bytes_per_sect]
 	sub dx,bp
 	cmp cx,dx
 	pop dx
-	ja .part
-	cmp cx,8
+	jna .npart
+	pop bx
+	jmp .part
+.npart	cmp bx,8
+	pop bx
 	ja .full
 	add [cs:.partial_len],cx
 	rep movsb
