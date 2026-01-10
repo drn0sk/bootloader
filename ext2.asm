@@ -413,8 +413,7 @@ _ext2_find_inode_in_block:
 	pop es
 	xor bp,bp
 	jmp .next_s
-.full	add bp,cx
-	add [cs:.partial_len],cx
+.full	;add [cs:.partial_len],cx
 	rep movsb
 	pop cx
 	mov di,si
@@ -432,7 +431,14 @@ _ext2_find_inode_in_block:
 	mov bp,di
 	pop di
 	pop es
+	mov cx,[cs:.partial_entry+4]
+	sub cx,[cs:.partial_len]
 	mov WORD [cs:.partial_len],0
+	add cx,bp
+	jc .nxt_sb
+	cmp cx,[cs:bytes_per_sect]
+	jae .nxt_sb
+	mov bp,cx
 .dir_lp	mov cx,[cs:bytes_per_sect]
 	sub cx,bp
 	cmp cx,8
