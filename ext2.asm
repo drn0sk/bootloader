@@ -416,7 +416,7 @@ _ext2_find_inode_in_block:
 .full	;add [cs:.partial_len],cx
 	rep movsb
 	pop cx
-	mov di,si
+	mov di,.partial_entry
 	pop si
 	pop ds
 	push cs
