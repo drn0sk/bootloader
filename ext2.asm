@@ -244,38 +244,84 @@ ext2_init:
 %include "paths.asm"
 
 _ext2_find_path:
-	mov eax,2
-_ext2_find_path_relative:	; ds:si -> path
-				; cx is the length of the path
-				; eax is the inode of the directory to look in (2 to look in the root dir)
-				; returns inode in eax
-				; Carry Flag (CF) set on error
+_ext2_find_path_absolute:
 	cmp BYTE [cs:ext2.initialized],0
 	jne .start
 	mov bp,1
 	stc
 	ret
-.start	;
+.start	push ds
+	push si
+	push cx
+	push es
+	push di
+	test cx,cx
+	mov bp,1
+	stc
+	jz _ext2_find_path_relative.exit
+	cmp BYTE [ds:si],'/'
+	je .ok
+	mov bp,1
+	stc
+	jmp _ext2_find_path_relative.exit ; absolute path must start with a '/'
+.ok	add si,1
+	mov ax,ds
+	adc ax,0
+	mov ds,ax
+	dec cx
+	mov eax,2
+	jmp _ext2_find_path_relative.loop
+_ext2_find_path_relative:	; ds:si -> path
+				; cx is the length of the path
+				; eax is the inode of the directory to look in (2 to look in the root dir)
+				; returns inode in eax
+				; Carry Flag (CF) set on error
+				;  if bp is zero, the file was not found
+				;  if bp is nonzero, there was some other error
+	cmp BYTE [cs:ext2.initialized],0
+	jne .start
+	mov bp,1
+	stc
+	ret
+.start	push ds
+	push si
+	push cx
+	push es
+	push di
 	test cx,cx
 	mov bp,1
 	stc
 	jz .exit
 	cmp BYTE [ds:si],'/'
-	jne .loop
-	add si,1
-	push ds
-	mov bp,sp
-	adc WORD [ss:bp],0
-	pop ds
-	dec cx
+	je _ext2_find_path_absolute.ok
 .loop	push eax
 	call path_next_part
 	test ax,ax
+	pop ebp
 	mov bp,1
 	stc
 	jz .exit
-	;;;
-.exit	;
+	push ds
+	push si
+	push cx
+	mov cx,ax
+	mov ax,es
+	mov ds,ax
+	mov si,di
+	mov eax,ebp
+	call _ext2_find_inode
+	pop cx
+	pop si
+	pop ds
+	jc .exit
+	test cx,cx
+	jnz .loop
+	clc
+.exit	pop di
+	pop es
+	pop cx
+	pop si
+	pop ds
 	ret
 
 _ext2_find_inode:	; ds:si -> name
