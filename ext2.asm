@@ -2,23 +2,6 @@
 	%define EXT2_INCLUDED
 	segment .text
 
-ext2:
-.initialized		db	0
-.drive_num		db	0
-.start_LBA		dd	0
-.bytes_per_block	dq	0
-.sect_per_block		dd	0
-.block_bytes_rem	dd	0
-.num_inodes		dd	0
-.num_blocks		dd	0
-.blocks_per_group	dd	0
-.inodes_per_group	dd	0
-.num_groups		dd	0
-.bgdt			db	1
-.inode_size		dw	128
-.inode_start		dd	11
-.dir_type_feature	db	0
-
 _load_byte_from_LBA:	; loads a byte at LBA (edx:eax) + byte offset (si) to al
 			; carry flag set on error
 	push es
@@ -137,6 +120,24 @@ _load_dword_from_LBA:	; loads a dword at LBA (edx:eax) + byte offset (si) to eax
 .exit	pop ecx
 	ret
 
+ext2:
+.initialized		db	0
+.drive_num		db	0
+.start_LBA		dd	0
+.log_block_size		db	0
+.bytes_per_block	dq	0
+.sect_per_block		dd	0
+.block_bytes_rem	dw	0
+.num_inodes		dd	0
+.num_blocks		dd	0
+.blocks_per_group	dd	0
+.inodes_per_group	dd	0
+.num_groups		dd	0
+.bgdt			db	1
+.inode_size		dw	128
+.inode_start		dd	11
+.dir_type_feature	db	0
+
 ; ext2_init
 ;LBA of partition in eax
 ;drive number in bl
@@ -153,9 +154,10 @@ ext2_init:
 	jnz .l1
 	inc BYTE [cs:ext2.bgdt]
 .l1	mov ecx,eax
-	cmp ecx,32	; we can't shift by 32 or more
+	cmp ecx,54	; we can't shift by 54 or more
 	stc
 	jnb .exit
+	mov [cs:ext2.log_block_size],cl
 	xor edx,edx
 	mov eax,1024
 	shld edx,eax,cl
@@ -163,9 +165,9 @@ ext2_init:
 	mov [cs:ext2.bytes_per_block],eax
 	mov [cs:ext2.bytes_per_block+4],edx
 	movzx ecx,WORD [cs:bytes_per_sect]
-	div ecx
+	div ecx		; dividing by sector_size which is a word
 	mov [cs:ext2.sect_per_block],eax
-	mov [cs:ext2.block_bytes_rem],edx
+	mov [cs:ext2.block_bytes_rem],dx ; so the remainder is also a word
 	pop eax
 	push eax
 	xor edx,edx
@@ -337,9 +339,218 @@ _ext2_find_inode:	; ds:si -> name
 	stc
 	ret
 .start	;
+	push si
+	push cx
+	xor edx,edx
+	dec eax
+	div DWORD [cs:ext2.inodes_per_group]
+	push edx ; save remainder for later
+	mov edx,32
+	mul edx
+	add eax,8
+	adc edx,0
+	movzx ecx,WORD [cs:bytes_per_sect]
+	div ecx
+	mov ebx,eax
+	mov cx,dx	; divided by a WORD so the remainder is also a WORD
+	mov ax,[cs:ext2.block_bytes_rem]
+	movzx bp,BYTE [cs:ext2.bgdt]
+	mul bp
+	mov bp,WORD [cs:bytes_per_sect]
+	div bp
+	push dx
+	push ax
+	mov eax,[cs:ext2.sect_per_block]
+	movzx ebp,BYTE [cs:ext2.bgdt]
+	mul ebp
+	xor ebp,ebp
+	pop bp
+	add eax,ebp
+	adc edx,0
+	pop si
+	add eax,[cs:ext2.start_LBA]
+	adc edx,0
+	add eax,ebx
+	adc edx,0
+	add si,cx
+	jc .noc
+	sub si,[cs:bytes_per_sect]
+	add eax,1
+	adc edx,0
+.noc	call _load_dword_from_LBA
+	pop edx
+	pop cx
+	pop si
+	mov bp,1
+	jc .exit
+	push si
+	push cx
+	push edx
+	push eax
+	movzx ecx,[cs:ext2.block_bytes_rem]
+	mul ecx
+	movzx ecx,WORD [cs:bytes_per_sect]
+	div ecx
+	mov si,dx
+	mov ebx,eax
+	pop eax
+	mov ecx,[cs:ext2.sect_per_block]
+	mul ecx
+	add eax,ebx
+	adc edx,0
+	mov ecx,eax
+	mov ebx,edx	; inode table start = ebx:ecx (sectors) + si (bytes)
+	pop eax
+	movzx ebp,WORD [cs:ext2.inode_size]
+	mul ebp
+	movzx ebp,WORD [cs:bytes_per_sect]
+	div ebp
+	add si,dx
+	jnc .nc
+	sub si,[cs:bytes_per_sect]
+	add ecx,1
+	adc ebx,0
+.nc	add ecx,eax
+	adc ebx,0
+	mov eax,ecx
+	mov edx,ebx
+	mov di,si	; inode entry = edx:eax (sectors) + di (bytes)
+	pop cx
+	pop si
+	;
 .exit	;
 	ret
 
+_ext2_foreach_block_wrapper:
+			; wrapper to use _ext2_foreach_block in _ext2_foreach_block
+			; es:di ->	args:
+			;		eax (indirect pointer)
+			;		ebx (max blocks high)
+			;		ecx (max blocks low)
+			;		ds (function segment)
+			;		si (function offset)
+			;		es (function args segment)
+			;		di (function args offset)
+			; CF set and bp = 0 -> exit loop on success
+			; CF set and bp != 0 -> exit loop on error
+			; CF unset -> continue
+	mov eax,[es:di]
+	mov ebx,[es:di+4]
+	mov ecx,[es:di+8]
+	mov ds,[es:di+12]
+	mov si,[es:di+14]
+	mov es,[es:di+16]
+	mov di,[es:di+18]
+	call _ext2_foreach_block
+	jc .nof
+	xor bp,bp
+	stc
+	ret
+.nof	test bp,bp
+	jnz .err
+	clc
+.err	ret
+
+_ext2_foreach_block:	;  indirect block pointer in eax
+			;  maximum number of blocks to read in ebx:ecx
+			;  (loops through the whole block if ebx:ecx = 0)
+			;  ds:si -> function to call for each block
+			;   Called with block pointer in eax
+			;   for each block in the indirect block
+			;  es:di -> any other args to provide to the function
+			;  If this function sets carry (CF) the loop is terminated:
+			;   successfully if bp = 0
+			;   on error if bp != 0
+			;   continues the loop if carry flag (CF) is unset
+			;  CF is set on error
+	call .is_zero
+	jnz .mx
+	push eax
+	mov cl,[cs:ext2.log_block_size]
+	add cl,8
+	xor edx,edx
+	mov eax,1
+	shld edx,eax,cl
+	shl eax,cl
+	mov ebx,edx
+	mov ecx,eax
+	pop eax
+.mx	push eax
+	movzx edx,WORD [cs:ext2.block_bytes_rem]
+	mul edx
+	movzx ebp,WORD [cs:bytes_per_sect]
+	div ebp
+	mov ebp,eax
+	pop eax
+	push dx
+	mov edx,[cs:ext2.sect_per_block]
+	mul edx
+	add eax,ebp
+	adc edx,0
+	jc .err
+	add eax,[cs:ext2.start_LBA]
+	adc edx,0
+	jc .err
+	pop bp
+.loop	xchg bp,si
+	call _load_dword_from_LBA
+	jc .err
+	xchg bp,si
+	mov [cs:.fn_ptr],si
+	mov [cs:.fn_ptr+2],ds
+	call far [cs:.fn_ptr]
+	jnc .cont
+	test bp,bp
+	jnz .err
+	clc
+	jmp .exit
+.cont	add bp,4
+	jnc .noc
+	sub bp,[cs:bytes_per_sect]
+	add eax,1
+	adc edx,0
+	jc .err
+.noc	sub ecx,1
+	sbb ebx,0
+	call .is_zero
+	jnz .loop
+	xor bp,bp
+	stc
+	jmp .exit
+.err	mov bp,1
+	stc
+.exit	ret
+.is_zero:		; sets ZF if ebx:ecx is zero, clears ZF otherwise
+	test ecx,ecx
+	jnz .nonz
+	test ebx,ebx
+.nonz	ret
+.fn_ptr	dd	0
+
+_ext2_find_inode_in_block_wrapper:
+			; wrapper to use _ext2_find_inode_in_block in
+			; _ext2_foreach_block
+			; es:di -> args:
+			;          eax (block address),
+			;          ds (name segment),
+			;          si (name offset),
+			;          cx (name len)
+			; CF set and bp = 0 -> file found (inode in eax)
+			; CF set and bp != 0 -> some error
+			; CF unset -> file not found
+	mov eax,[es:di]
+	mov ds,[es:di+4]
+	mov si,[es:di+6]
+	mov cx,[es:di+8]
+	call _ext2_find_inode_in_block
+	jc .nof
+	xor bp,bp
+	stc
+	ret	; CF set and bp=0 -> file found
+.nof	test bp,bp
+	jnz .err
+	clc
+.err	ret
 _ext2_find_inode_in_block:
 			; block address in eax
 			; ds:si -> name
@@ -362,7 +573,7 @@ _ext2_find_inode_in_block:
 	pop ecx
 	push edx
 	push eax
-	mov eax,[cs:ext2.block_bytes_rem]
+	movzx eax,[cs:ext2.block_bytes_rem]
 	mul ecx
 	movzx ecx,WORD [cs:bytes_per_sect]
 	div ecx
