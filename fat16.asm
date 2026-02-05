@@ -67,7 +67,8 @@ fat16_init:	; LBA of partition in eax
 	push WORD [cs:_buff.seg]
 	pop es
 	mov bx,[cs:_buff.off]
-	movzx ax,[es:bx+fat_BS.sect_per_clust]
+	xor ah,ah
+	mov al,[es:bx+fat_BS.sect_per_clust]
 	xor edx,edx
 	mul WORD [es:bx+fat_BS.bytes_per_sect]
 	mov WORD [cs:fat16.bytes_per_clust],ax
