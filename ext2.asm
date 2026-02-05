@@ -245,7 +245,6 @@ ext2_init:
 
 %include "paths.asm"
 
-_ext2_find_path:
 _ext2_find_path_absolute:
 	cmp BYTE [cs:ext2.initialized],0
 	jne .start
@@ -267,15 +266,13 @@ _ext2_find_path_absolute:
 	stc
 	jmp _ext2_find_path_relative.exit ; absolute path must start with a '/'
 .ok	add si,1
-	mov ax,ds
-	adc ax,0
-	mov ds,ax
 	dec cx
 	mov eax,2
 	jmp _ext2_find_path_relative.loop
+_ext2_find_path:
 _ext2_find_path_relative:	; ds:si -> path
 				; cx is the length of the path
-				; eax is the inode of the directory to look in (2 to look in the root dir)
+				; eax is the inode of the directory to look in (2 to look in the root dir) (only needed if path is relative)
 				; returns inode in eax
 				; Carry Flag (CF) set on error
 				;  if bp is zero, the file was not found
@@ -338,8 +335,7 @@ _ext2_find_inode:	; ds:si -> name
 	mov bp,1
 	stc
 	ret
-.start	;
-	push si
+.start	push si
 	push cx
 	xor edx,edx
 	dec eax
@@ -387,7 +383,7 @@ _ext2_find_inode:	; ds:si -> name
 	push cx
 	push edx
 	push eax
-	movzx ecx,[cs:ext2.block_bytes_rem]
+	movzx ecx,WORD [cs:ext2.block_bytes_rem]
 	mul ecx
 	movzx ecx,WORD [cs:bytes_per_sect]
 	div ecx
@@ -418,8 +414,7 @@ _ext2_find_inode:	; ds:si -> name
 	pop cx
 	pop si
 	;
-.exit	;
-	ret
+.exit	ret
 
 _ext2_foreach_block_wrapper:
 			; wrapper to use _ext2_foreach_block in _ext2_foreach_block
@@ -573,7 +568,7 @@ _ext2_find_inode_in_block:
 	pop ecx
 	push edx
 	push eax
-	movzx eax,[cs:ext2.block_bytes_rem]
+	movzx eax,WORD [cs:ext2.block_bytes_rem]
 	mul ecx
 	movzx ecx,WORD [cs:bytes_per_sect]
 	div ecx
@@ -676,8 +671,7 @@ _ext2_find_inode_in_block:
 	pop es
 	xor bp,bp
 	jmp .next_s
-.full	;add [cs:.partial_len],cx
-	rep movsb
+.full	rep movsb
 	pop cx
 	mov di,.partial_entry
 	pop si
@@ -851,8 +845,8 @@ ext2_load_file_absolute:	; ds:si -> path
 	mov bp,1
 	stc
 	ret
-.start	;
-.exit	;
+.start:	;
+.exit:	;
 	ret
 
 ext2_load_file_relative:	; ds:si -> path
@@ -865,8 +859,8 @@ ext2_load_file_relative:	; ds:si -> path
 	mov bp,1
 	stc
 	ret
-.start	;
-.exit	;
+.start:	;
+.exit:	;
 	ret
 
 ext2_get_file_size:		; ds:si -> path
@@ -878,8 +872,8 @@ ext2_get_file_size:		; ds:si -> path
 	mov bp,1
 	stc
 	ret
-.start	;
-.exit	;
+.start:	;
+.exit:	;
 	ret
 
 ; EXT2_INCLUDED
