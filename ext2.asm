@@ -2,7 +2,8 @@
 	%define EXT2_INCLUDED
 	segment .text
 
-_load_byte_from_LBA:	; loads a byte at LBA (edx:eax) + byte offset (si) to al
+_load_byte_from_LBA:	; loads a byte at LBA (edx:eax) + byte offset (si)
+			; to lower byte of bp
 			; carry flag set on error
 	push es
 	push di
@@ -14,10 +15,13 @@ _load_byte_from_LBA:	; loads a byte at LBA (edx:eax) + byte offset (si) to al
 	mov ax,si
 	div WORD [cs:bytes_per_sect]	; quotient in ax, remainder in dx
 	mov cx,dx	; move remainder to cx
+	xor bx,bx
 	mov bx,ax	; move quotient to bx
 	pop eax
 	pop edx
-	movzx ebx,bx
+	push edx
+	push eax
+	;movzx ebx,bx
 	add eax,ebx
 	adc edx,0
 	push cx
@@ -29,95 +33,96 @@ _load_byte_from_LBA:	; loads a byte at LBA (edx:eax) + byte offset (si) to al
 	call read
 	pop bx
 	jc .exit
+	mov ax,bp
 	mov al,[es:di+bx]
+	mov bp,ax
 	clc
-.exit	pop ebx
+.exit	pop eax
+	pop edx
+	pop ebx
 	pop cx
 	pop di
 	pop es
 	ret
 
-_load_word_from_LBA:	; loads a word at LBA (edx:eax) + byte offset (si) to ax
+_load_word_from_LBA:	; loads a word at LBA (edx:eax) + byte offset (si) to bp
 			; sets carry flag on error
+	push es
+	push di
 	push cx
+	push ebx
 	push edx
 	push eax
-	push si
-	call _load_byte_from_LBA
-	pop si
-	mov cl,al
+	xor dx,dx
+	mov ax,si
+	div WORD [cs:bytes_per_sect]	; quotient in ax, remainder in dx
+	mov cx,dx	; move remainder to cx
+	xor bx,bx
+	mov bx,ax	; move quotient to bx
 	pop eax
 	pop edx
-	jc .exit
-	add si,1
-	jnc .nc
-	sub si,[cs:bytes_per_sect]
-	add eax,1
+	push edx
+	push eax
+	;movzx ebx,bx
+	add eax,ebx
 	adc edx,0
-.nc	call _load_byte_from_LBA
+	push cx
+	mov cx,1
+	mov bl,[cs:ext2.drive_num]
+	push WORD [cs:_buff.seg]
+	pop es
+	mov di,[cs:_buff.off]
+	call read
+	pop bx
 	jc .exit
-	mov ah,al
-	mov al,cl
+	mov bp,[es:di+bx]
 	clc
-.exit	pop cx
+.exit	pop eax
+	pop edx
+	pop ebx
+	pop cx
+	pop di
+	pop es
 	ret
 
-_load_dword_from_LBA:	; loads a dword at LBA (edx:eax) + byte offset (si) to eax
+_load_dword_from_LBA:	; loads a dword at LBA (edx:eax) + byte offset (si) to ebp
 			; sets carry flag on error
-	push ecx
+	push es
+	push di
+	push cx
+	push ebx
 	push edx
 	push eax
-	push si
-	call _load_byte_from_LBA
-	pop si
-	mov cl,al
+	xor dx,dx
+	mov ax,si
+	div WORD [cs:bytes_per_sect]	; quotient in ax, remainder in dx
+	mov cx,dx	; move remainder to cx
+	xor bx,bx
+	mov bx,ax	; move quotient to bx
 	pop eax
 	pop edx
-	jc .exit
-	add si,1
-	jnc .nc0
-	sub si,[cs:bytes_per_sect]
-	add eax,1
-	adc edx,0
-.nc0	push edx
+	push edx
 	push eax
-	push si
-	call _load_byte_from_LBA
-	pop si
-	mov ch,al
-	pop eax
-	pop edx
-	jc .exit
-	shl ecx,16
-	add si,1
-	jnc .nc1
-	sub si,[cs:bytes_per_sect]
-	add eax,1
+	;movzx ebx,bx
+	add eax,ebx
 	adc edx,0
-.nc1	push edx
-	push eax
-	push si
-	call _load_byte_from_LBA
-	pop si
-	mov cl,al
-	pop eax
-	pop edx
+	push cx
+	mov cx,1
+	mov bl,[cs:ext2.drive_num]
+	push WORD [cs:_buff.seg]
+	pop es
+	mov di,[cs:_buff.off]
+	call read
+	pop bx
 	jc .exit
-	add si,1
-	jnc .nc2
-	sub si,[cs:bytes_per_sect]
-	add eax,1
-	adc edx,0
-.nc2	call _load_byte_from_LBA
-	jc .exit
-	mov ah,al
-	mov al,cl
-	shl eax,16
-	shr ecx,16
-	mov ah,ch
-	mov al,cl
+	mov ebp,[es:di+bx]
 	clc
-.exit	pop ecx
+.exit	pop eax
+	pop edx
+	pop ebx
+	pop cx
+	pop di
+	pop es
 	ret
 
 ext2:
@@ -143,6 +148,11 @@ ext2:
 ;drive number in bl
 ;carry flag set on error
 ext2_init:
+	push si
+	push ebp
+	push ebx
+	push ecx
+	push edx
 	mov [cs:ext2.drive_num],bl
 	mov [cs:ext2.start_LBA],eax
 	push eax
@@ -150,15 +160,14 @@ ext2_init:
 	mov si,1024+24
 	call _load_dword_from_LBA
 	jc .exit
-	test eax,eax
+	test ebp,ebp
 	jnz .l1
 	inc BYTE [cs:ext2.bgdt]
-.l1	mov ecx,eax
+.l1	mov ecx,ebp
 	cmp ecx,54	; we can't shift by 54 or more
 	stc
 	jnb .exit
 	mov [cs:ext2.log_block_size],cl
-	xor edx,edx
 	mov eax,1024
 	shld edx,eax,cl
 	shl eax,cl
@@ -174,24 +183,18 @@ ext2_init:
 	mov si,1024
 	call _load_dword_from_LBA
 	jc .exit
-	mov [cs:ext2.num_inodes],eax
-	pop eax
-	push eax
-	xor edx,edx
+	mov [cs:ext2.num_inodes],ebp
 	mov si,1024+4
 	call _load_dword_from_LBA
 	jc .exit
-	mov [cs:ext2.num_blocks],eax
-	mov ecx,eax
-	pop eax
-	push eax
-	xor edx,edx
+	mov [cs:ext2.num_blocks],ebp
+	mov ecx,ebp
 	mov si,1024+32
 	call _load_dword_from_LBA
 	jc .exit
-	xchg ecx,eax
+	mov eax,ecx
+	mov ecx,ebp
 	mov [cs:ext2.blocks_per_group],ecx
-	xor edx,edx
 	div ecx
 	test edx,edx
 	jz .nr2
@@ -203,44 +206,37 @@ ext2_init:
 	mov si,1024+40
 	call _load_dword_from_LBA
 	jc .exit
-	mov [cs:ext2.inodes_per_group],eax
-	pop eax
-	push eax
-	xor edx,edx
+	mov [cs:ext2.inodes_per_group],ebp
 	mov si,1024+76
 	call _load_dword_from_LBA
 	jc .exit
-	cmp eax,1
+	cmp ebp,1
 	jb .v0
-	pop eax
-	push eax
-	xor edx,edx
 	mov si,1024+88
 	call _load_word_from_LBA
 	jc .exit
-	mov [cs:ext2.inode_size],ax
-	pop eax
-	push eax
-	xor edx,edx
+	mov [cs:ext2.inode_size],bp
 	mov si,1024+84
 	call _load_dword_from_LBA
 	jc .exit
-	mov [cs:ext2.inode_start],eax
-	pop eax
-	push eax
-	xor edx,edx
+	mov [cs:ext2.inode_start],ebp
 	mov si,1024+96
 	call _load_dword_from_LBA
 	jc .exit
-	test eax,2
+	test ebp,2
 	jz .no_typ
 	mov BYTE [cs:ext2.dir_type_feature],1
-.no_typ	and eax,~2
+.no_typ	and ebp,~2
 	stc
 	jnz .exit
 .v0	clc
 	mov BYTE [cs:ext2.initialized],0x01
 .exit	pop eax
+	push edx
+	push ecx
+	push ebx
+	push ebp
+	push si
 	ret
 
 %include "paths.asm"
@@ -382,7 +378,8 @@ _ext2_find_inode:	; ds:si -> name
 	push si
 	push cx
 	push edx
-	push eax
+	push ebp
+	mov eax,ebp
 	movzx ecx,WORD [cs:ext2.block_bytes_rem]
 	mul ecx
 	movzx ecx,WORD [cs:bytes_per_sect]
@@ -410,45 +407,241 @@ _ext2_find_inode:	; ds:si -> name
 	adc ebx,0
 	mov eax,ecx
 	mov edx,ebx
+	add si,4
+	jnc .nc1
+	sub si,[cs:bytes_per_sect]
+	add eax,1
+	adc edx,0	; inode entry = edx:eax (sectors) + si (bytes)
+.nc1	call _load_dword_from_LBA
+	mov ebx,ebp
+	pop bp
+	pop di
+	jc .exit
+	push eax
+	mov cl,[cs:ext2.log_block_size]
+	add cl,10
+	xor eax,eax
+	shrd eax,ebx,cl
+	shr ebx,cl
+	test eax,eax
+	jnz .noceil
+	inc ebx
+.noceil	pop eax
+	push di
+	push bp
 	mov di,si	; inode entry = edx:eax (sectors) + di (bytes)
 	pop cx
 	pop si
+	add di,36
+	jnc .nc2
+	sub di,[cs:bytes_per_sect]
+	add eax,1
+	adc edx,0
+.nc2	mov bp,12
+.loop	xchg si,di
+	push bp
+	call _load_dword_from_LBA
+	xchg si,di
+	jnc .cont
+	pop bp
+	mov bp,1
+	ret
+.cont	push eax
+	mov eax,ebp
+	call _ext2_find_inode_in_block
+	jc .nof
+	pop ebp
+	pop bp
+	clc
+	ret		; file found
+.nof	test bp,bp
+	pop eax
+	pop bp
+	mov bp,1
+	stc
+	jnz .exit	; some other error
+	; file not found
+	add di,4
+	jnc .nc3
+	sub di,[cs:bytes_per_sect]
+	add eax,1
+	adc edx,0
+.nc3	dec bp
+	jnz .loop
+	; edx:eax (s) + di (b) -> singly indirect pointer
+	push cx
+	push si
+	push ds
+	sub esp,4
+	mov si,sp
+	xor ecx,ecx
+	xchg ebx,ecx
+	push edx
+	push eax
+	push di
+	xchg si,di
+	call _load_dword_from_LBA
+	jnc .gotp
+	add sp,20
+	mov bp,1
+	ret
+.gotp	mov eax,ebp
+	push cs
+	pop ds
+	mov si,_ext2_find_inode_in_block_wrapper
+	push ss
+	pop es
+	; eax = block pointer
+	; ebx:ecx = size in blocks
+	call _ext2_foreach_block	; singly indirect
+	;shl edi,16
+	pop di
+	pop eax
+	pop edx
+	jc .err
+	test bp,bp
+	jz .nof2
+	pop eax
+	pop ds
+	pop si
+	pop cx
+	clc
+	ret	; file found
+.err	pop ebp
+	pop ds
+	pop si
+	pop cx
+	mov bp,1
+	ret
+.nof2	add di,4
+	jnc .nc4
+	sub di,[cs:bytes_per_sect]
+	add eax,1
+	add edx,0
+.nc4	mov si,di
+	call _load_dword_from_LBA
+	jnc .ld_ok
+	add sp,10
+	mov bp,1
+	ret
+.ld_ok	push sp
+	push ss
+	push _ext2_find_inode_in_block_wrapper
+	push cs
+	push ecx
+	push ebx
+	mov di,sp
+	push ss
+	pop es
+	push edx
+	push eax
+	push si
+	mov eax,ebp
+	push cs
+	pop ds
+	mov si,_ext2_foreach_block_wrapper
+	call _ext2_foreach_block	; doubly indirect
 	;
+	pop di
+	pop eax
+	pop edx
+	jc .err2
+	test bp,bp
+	jz .nof3
+	add sp,16
+	pop eax
+	pop ds
+	pop si
+	pop cx
+	clc
+	ret	; file found
+.err2	add sp,16
+	pop ebp
+	pop ds
+	pop si
+	pop cx
+	mov bp,1
+	ret
+.nof3	add di,4
+	jnc .nc5
+	sub di,[cs:bytes_per_sect]
+	add eax,1
+	add edx,0
+.nc5	mov si,di
+	call _load_dword_from_LBA
+	jnc .ld_ok1
+	add sp,26
+	mov bp,1
+	ret
+.ld_ok1	push sp
+	push ss
+	push _ext2_find_inode_in_block_wrapper
+	push cs
+	push ecx
+	push ebx
+	mov di,sp
+	push ss
+	pop es
+	push edx
+	push eax
+	push si
+	mov eax,ebp
+	push cs
+	pop ds
+	mov si,_ext2_foreach_block_wrapper
+	call _ext2_foreach_block	; trebly indirect
+	pop eax
+	pop eax
+	pop ax
+	pushf
+	pop eax
+	add sp,38
+	push eax
+	popf
+	pop eax
+	mov dx,bp
+	mov bp,1
+	jc .exit
+	xor bp,bp
+	stc
+	test dx,dx
+	jz .exit
+	clc
 .exit	ret
 
 _ext2_foreach_block_wrapper:
 			; wrapper to use _ext2_foreach_block in _ext2_foreach_block
 			; es:di ->	args:
-			;		eax (indirect pointer)
 			;		ebx (max blocks high)
 			;		ecx (max blocks low)
 			;		ds (function segment)
 			;		si (function offset)
 			;		es (function args segment)
 			;		di (function args offset)
-			; CF set and bp = 0 -> exit loop on success
+			; CF set and bp == 0 -> exit loop on success
 			; CF set and bp != 0 -> exit loop on error
 			; CF unset -> continue
-	mov eax,[es:di]
-	mov ebx,[es:di+4]
-	mov ecx,[es:di+8]
-	mov ds,[es:di+12]
-	mov si,[es:di+14]
-	mov es,[es:di+16]
-	mov di,[es:di+18]
+	mov ebx,[es:di]
+	mov ecx,[es:di+4]
+	mov ds,[es:di+8]
+	mov si,[es:di+10]
+	mov es,[es:di+12]
+	mov di,[es:di+14]
 	call _ext2_foreach_block
-	jc .nof
+	mov [es:di],ebx
+	mov [es:di+4],ecx
+	mov bp,1
+	jc .exit
+	test bp,bp
+	jz .exit
 	xor bp,bp
 	stc
-	ret
-.nof	test bp,bp
-	jnz .err
-	clc
-.err	ret
+.exit	ret
 
 _ext2_foreach_block:	;  indirect block pointer in eax
 			;  maximum number of blocks to read in ebx:ecx
-			;  (loops through the whole block if ebx:ecx = 0)
+			;  (does not read more than the number of blocks in a block)
+			;  returns ebx:ecx - <# of blocks read> in ebx:ecx
 			;  ds:si -> function to call for each block
 			;   Called with block pointer in eax
 			;   for each block in the indirect block
@@ -458,8 +651,9 @@ _ext2_foreach_block:	;  indirect block pointer in eax
 			;   on error if bp != 0
 			;   continues the loop if carry flag (CF) is unset
 			;  CF is set on error
-	call .is_zero
-	jnz .mx
+			;  CF clear on success
+			;    with bp nonzero if we exited early
+			;         bp zero if we reached the end of the loop
 	push eax
 	mov cl,[cs:ext2.log_block_size]
 	add cl,8
@@ -467,10 +661,15 @@ _ext2_foreach_block:	;  indirect block pointer in eax
 	mov eax,1
 	shld edx,eax,cl
 	shl eax,cl
-	mov ebx,edx
-	mov ecx,eax
-	pop eax
-.mx	push eax
+	cmp ebx,edx
+	jb .start
+	ja .sub
+	cmp ecx,eax
+	jna .start
+.sub	sub ecx,eax
+	sbb ebx,edx
+.start	pop eax
+	push eax
 	movzx edx,WORD [cs:ext2.block_bytes_rem]
 	mul edx
 	movzx ebp,WORD [cs:bytes_per_sect]
@@ -487,19 +686,37 @@ _ext2_foreach_block:	;  indirect block pointer in eax
 	adc edx,0
 	jc .err
 	pop bp
-.loop	xchg bp,si
+.loop	shl esi,16
+	mov si,bp
+	;xchg bp,si
 	call _load_dword_from_LBA
 	jc .err
-	xchg bp,si
-	mov [cs:.fn_ptr],si
+	push eax
+	mov eax,ebp
+	mov bp,si
+	shr esi,16
+	push bp
+	test eax,eax
+	jnz .b_ok
+	shl esi,16
+	pop si
+	pop eax
+	jmp .cont ; skip any block pointers that are zero
+.b_ok	mov [cs:.fn_ptr],si
 	mov [cs:.fn_ptr+2],ds
 	call far [cs:.fn_ptr]
+	shl esi,16
+	pop si
+	pop eax
 	jnc .cont
 	test bp,bp
 	jnz .err
+	mov bp,1
 	clc
 	jmp .exit
-.cont	add bp,4
+.cont	mov bp,si
+	shr esi,16
+	add bp,4
 	jnc .noc
 	sub bp,[cs:bytes_per_sect]
 	add eax,1
@@ -510,10 +727,9 @@ _ext2_foreach_block:	;  indirect block pointer in eax
 	call .is_zero
 	jnz .loop
 	xor bp,bp
-	stc
+	clc
 	jmp .exit
-.err	mov bp,1
-	stc
+.err	stc
 .exit	ret
 .is_zero:		; sets ZF if ebx:ecx is zero, clears ZF otherwise
 	test ecx,ecx
@@ -526,18 +742,18 @@ _ext2_find_inode_in_block_wrapper:
 			; wrapper to use _ext2_find_inode_in_block in
 			; _ext2_foreach_block
 			; es:di -> args:
-			;          eax (block address),
+			;          eax (inode returned),
 			;          ds (name segment),
 			;          si (name offset),
 			;          cx (name len)
 			; CF set and bp = 0 -> file found (inode in eax)
 			; CF set and bp != 0 -> some error
 			; CF unset -> file not found
-	mov eax,[es:di]
 	mov ds,[es:di+4]
 	mov si,[es:di+6]
 	mov cx,[es:di+8]
 	call _ext2_find_inode_in_block
+	mov [es:di],eax
 	jc .nof
 	xor bp,bp
 	stc
