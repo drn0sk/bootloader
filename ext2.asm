@@ -232,11 +232,11 @@ ext2_init:
 .v0	clc
 	mov BYTE [cs:ext2.initialized],0x01
 .exit	pop eax
-	push edx
-	push ecx
-	push ebx
-	push ebp
-	push si
+	pop edx
+	pop ecx
+	pop ebx
+	pop ebp
+	pop si
 	ret
 
 %include "paths.asm"
@@ -637,7 +637,6 @@ _ext2_foreach_block_wrapper:
 	xor bp,bp
 	stc
 .exit	ret
-
 _ext2_foreach_block:	;  indirect block pointer in eax
 			;  maximum number of blocks to read in ebx:ecx
 			;  (does not read more than the number of blocks in a block)
