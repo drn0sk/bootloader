@@ -528,8 +528,6 @@ _ext2_find_inode:	; ds:si -> name
 	push ss
 	push _ext2_find_inode_in_block_wrapper
 	push cs
-	push ecx
-	push ebx
 	mov di,sp
 	push ss
 	pop es
@@ -548,14 +546,14 @@ _ext2_find_inode:	; ds:si -> name
 	jc .err2
 	test bp,bp
 	jz .nof3
-	add sp,16
+	add sp,8
 	pop eax
 	pop ds
 	pop si
 	pop cx
 	clc
 	ret	; file found
-.err2	add sp,16
+.err2	add sp,8
 	pop ebp
 	pop ds
 	pop si
@@ -570,35 +568,34 @@ _ext2_find_inode:	; ds:si -> name
 .nc5	mov si,di
 	call _load_dword_from_LBA
 	jnc .ld_ok1
-	add sp,26
+	add sp,18
 	mov bp,1
 	ret
 .ld_ok1	push sp
 	push ss
 	push _ext2_find_inode_in_block_wrapper
 	push cs
-	push ecx
-	push ebx
 	mov di,sp
 	push ss
 	pop es
-	push edx
-	push eax
-	push si
+	;push edx
+	;push eax
+	;push si
 	mov eax,ebp
 	push cs
 	pop ds
 	mov si,_ext2_foreach_block_wrapper
 	call _ext2_foreach_block	; trebly indirect
-	pop eax
-	pop eax
-	pop ax
+	;pop ax
+	;pop eax
+	;pop eax
 	pushf
+	pop edx
+	add sp,16
 	pop eax
-	add sp,38
-	push eax
+	add sp,6
+	push edx
 	popf
-	pop eax
 	mov dx,bp
 	mov bp,1
 	jc .exit
@@ -612,8 +609,6 @@ _ext2_find_inode:	; ds:si -> name
 _ext2_foreach_block_wrapper:
 			; wrapper to use _ext2_foreach_block in _ext2_foreach_block
 			; es:di ->	args:
-			;		ebx (max blocks high)
-			;		ecx (max blocks low)
 			;		ds (function segment)
 			;		si (function offset)
 			;		es (function args segment)
@@ -621,15 +616,19 @@ _ext2_foreach_block_wrapper:
 			; CF set and bp == 0 -> exit loop on success
 			; CF set and bp != 0 -> exit loop on error
 			; CF unset -> continue
-	mov ebx,[es:di]
-	mov ecx,[es:di+4]
+	push ds
+	push si
+	push es
+	push di
 	mov ds,[es:di+8]
 	mov si,[es:di+10]
 	mov es,[es:di+12]
 	mov di,[es:di+14]
 	call _ext2_foreach_block
-	mov [es:di],ebx
-	mov [es:di+4],ecx
+	pop di
+	pop es
+	pop si
+	pop ds
 	mov bp,1
 	jc .exit
 	test bp,bp
@@ -643,23 +642,27 @@ _ext2_foreach_block:	;  indirect block pointer in eax
 			;  returns ebx:ecx - <# of blocks read> in ebx:ecx
 			;  ds:si -> function to call for each block
 			;   Called with block pointer in eax
+			;   and number of blocks read in ebx:ecx
 			;   for each block in the indirect block
-			;  es:di -> any other args to provide to the function
-			;  If this function sets carry (CF) the loop is terminated:
-			;   successfully if bp = 0
-			;   on error if bp != 0
-			;   continues the loop if carry flag (CF) is unset
+			;   es:di -> any other args to provide to the function
+			;   If this function sets carry (CF) the loop is terminated:
+			;    successfully if bp = 0
+			;    on error if bp != 0
+			;    continues the loop if carry flag (CF) is unset
 			;  CF is set on error
 			;  CF clear on success
 			;    with bp nonzero if we exited early
 			;         bp zero if we reached the end of the loop
+	push edx
 	push eax
+	push ecx
 	mov cl,[cs:ext2.log_block_size]
 	add cl,8
 	xor edx,edx
 	mov eax,1
 	shld edx,eax,cl
 	shl eax,cl
+	pop ecx
 	cmp ebx,edx
 	jb .start
 	ja .sub
@@ -687,7 +690,6 @@ _ext2_foreach_block:	;  indirect block pointer in eax
 	pop bp
 .loop	shl esi,16
 	mov si,bp
-	;xchg bp,si
 	call _load_dword_from_LBA
 	jc .err
 	push eax
@@ -729,7 +731,8 @@ _ext2_foreach_block:	;  indirect block pointer in eax
 	clc
 	jmp .exit
 .err	stc
-.exit	ret
+.exit	pop edx
+	ret
 .is_zero:		; sets ZF if ebx:ecx is zero, clears ZF otherwise
 	test ecx,ecx
 	jnz .nonz
@@ -748,11 +751,19 @@ _ext2_find_inode_in_block_wrapper:
 			; CF set and bp = 0 -> file found (inode in eax)
 			; CF set and bp != 0 -> some error
 			; CF unset -> file not found
+	push ds
+	push si
+	push ecx
+	push eax
 	mov ds,[es:di+4]
 	mov si,[es:di+6]
 	mov cx,[es:di+8]
 	call _ext2_find_inode_in_block
 	mov [es:di],eax
+	pop eax
+	pop ecx
+	pop si
+	pop ds
 	jc .nof
 	xor bp,bp
 	stc
@@ -774,7 +785,11 @@ _ext2_find_inode_in_block:
 	mov bp,1
 	stc
 	ret
-.start	push ecx
+.start	push ebx
+	push es
+	push di
+	push edx
+	push ecx
 	mov bp,cx
 	shl ebp,16
 	push eax
@@ -934,11 +949,7 @@ _ext2_find_inode_in_block:
 	mov ecx,ebp
 	shr ecx,16
 	call .check_entry
-	;shl edi,16
-	;mov di,bp
 	jnc .done
-	;mov bp,di
-	;shr edi,16
 .nxt_dr	mov cx,bp
 	add cx,[es:di+bp+4]
 	jc .nxt_sb
@@ -1006,6 +1017,10 @@ _ext2_find_inode_in_block:
 .done	pop ecx
 	clc
 .exit	pop ecx
+	pop edx
+	pop di
+	pop es
+	pop ebx
 	ret
 .partial_entry	times 263 db 0
 .partial_len	dw	0
