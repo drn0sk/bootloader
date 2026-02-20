@@ -370,15 +370,13 @@ _ext2_find_inode:	; ds:si -> name
 	add eax,1
 	adc edx,0
 .noc	call _load_dword_from_LBA
+	jnc .rd_bgt
 	pop edx
 	pop cx
 	pop si
 	mov bp,1
-	jc .exit
-	push si
-	push cx
-	push edx
-	push ebp
+	jmp .exit
+.rd_bgt	push ebp
 	mov eax,ebp
 	movzx ecx,WORD [cs:ext2.block_bytes_rem]
 	mul ecx
@@ -390,6 +388,8 @@ _ext2_find_inode:	; ds:si -> name
 	mov ecx,[cs:ext2.sect_per_block]
 	mul ecx
 	add eax,ebx
+	adc edx,0
+	add eax,[cs:ext2.start_LBA]
 	adc edx,0
 	mov ecx,eax
 	mov ebx,edx	; inode table start = ebx:ecx (sectors) + si (bytes)
@@ -413,11 +413,13 @@ _ext2_find_inode:	; ds:si -> name
 	add eax,1
 	adc edx,0	; inode entry = edx:eax (sectors) + si (bytes)
 .nc1	call _load_dword_from_LBA
+	jnc .got_sz
 	mov ebx,ebp
 	pop bp
 	pop di
-	jc .exit
-	push eax
+	mov bp,1
+	jmp .exit
+.got_sz	push eax
 	mov cl,[cs:ext2.log_block_size]
 	add cl,10
 	xor eax,eax
@@ -445,7 +447,7 @@ _ext2_find_inode:	; ds:si -> name
 	jnc .cont
 	pop bp
 	mov bp,1
-	ret
+	jmp .exit
 .cont	push eax
 	mov eax,ebp
 	call _ext2_find_inode_in_block
@@ -453,7 +455,7 @@ _ext2_find_inode:	; ds:si -> name
 	pop ebp
 	pop bp
 	clc
-	ret		; file found
+	jmp .exit	; file found
 .nof	test bp,bp
 	pop eax
 	pop bp
@@ -484,7 +486,7 @@ _ext2_find_inode:	; ds:si -> name
 	jnc .gotp
 	add sp,20
 	mov bp,1
-	ret
+	jmp .exit
 .gotp	mov eax,ebp
 	push cs
 	pop ds
@@ -506,24 +508,24 @@ _ext2_find_inode:	; ds:si -> name
 	pop si
 	pop cx
 	clc
-	ret	; file found
+	jmp .exit	; file found
 .err	pop ebp
 	pop ds
 	pop si
 	pop cx
 	mov bp,1
-	ret
+	jmp .exit
 .nof2	add di,4
 	jnc .nc4
 	sub di,[cs:bytes_per_sect]
 	add eax,1
-	add edx,0
+	adc edx,0
 .nc4	mov si,di
 	call _load_dword_from_LBA
 	jnc .ld_ok
 	add sp,10
 	mov bp,1
-	ret
+	jmp .exit
 .ld_ok	push sp
 	push ss
 	push _ext2_find_inode_in_block_wrapper
@@ -552,25 +554,25 @@ _ext2_find_inode:	; ds:si -> name
 	pop si
 	pop cx
 	clc
-	ret	; file found
+	jmp .exit	; file found
 .err2	add sp,8
 	pop ebp
 	pop ds
 	pop si
 	pop cx
 	mov bp,1
-	ret
+	jmp .exit
 .nof3	add di,4
 	jnc .nc5
 	sub di,[cs:bytes_per_sect]
 	add eax,1
-	add edx,0
+	adc edx,0
 .nc5	mov si,di
 	call _load_dword_from_LBA
 	jnc .ld_ok1
 	add sp,18
 	mov bp,1
-	ret
+	jmp .exit
 .ld_ok1	push sp
 	push ss
 	push _ext2_find_inode_in_block_wrapper
