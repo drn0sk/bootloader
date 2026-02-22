@@ -373,7 +373,7 @@ _ext2_find_inode:	; ds:si -> name
 	add eax,ebx
 	adc edx,0
 	add si,cx
-	jc .noc
+	jnc .noc
 	sub si,[cs:bytes_per_sect]
 	add eax,1
 	adc edx,0
@@ -740,7 +740,7 @@ _ext2_foreach_block:	;  indirect block pointer in eax
 	sub bp,[cs:bytes_per_sect]
 	add eax,1
 	adc edx,0
-	jc .err
+	jmp .err
 .noc	sub ecx,1
 	sbb ebx,0
 	call .is_zero
@@ -1154,7 +1154,7 @@ _ext2_get_inode_size:		; eax is the inode of the file to get the size of
 	add eax,ebx
 	adc edx,0
 	add si,cx
-	jc .noc
+	jnc .noc
 	sub si,[cs:bytes_per_sect]
 	add eax,1
 	adc edx,0
