@@ -142,6 +142,7 @@ ext2:
 .inode_size		dw	128
 .inode_start		dd	11
 .dir_type_feature	db	0
+.size64			db	0
 
 ; ext2_init
 ;LBA of partition in eax
@@ -229,6 +230,12 @@ ext2_init:
 .no_typ	and ebp,~2
 	stc
 	jnz .exit
+	mov si,1024+100
+	call _load_dword_from_LBA
+	jc .exit
+	test ebp,2
+	jz .v0
+	mov BYTE [cs:ext2.size64],1
 .v0	clc
 	mov BYTE [cs:ext2.initialized],0x01
 .exit	pop eax
@@ -331,8 +338,9 @@ _ext2_find_inode:	; ds:si -> name
 	mov bp,1
 	stc
 	ret
-.start	push si
-	push cx
+.start	mov di,cx
+	shl edi,16
+	mov di,si
 	xor edx,edx
 	dec eax
 	div DWORD [cs:ext2.inodes_per_group]
@@ -372,8 +380,6 @@ _ext2_find_inode:	; ds:si -> name
 .noc	call _load_dword_from_LBA
 	jnc .rd_bgt
 	pop edx
-	pop cx
-	pop si
 	mov bp,1
 	jmp .exit
 .rd_bgt	push ebp
@@ -414,26 +420,21 @@ _ext2_find_inode:	; ds:si -> name
 	adc edx,0	; inode entry = edx:eax (sectors) + si (bytes)
 .nc1	call _load_dword_from_LBA
 	jnc .got_sz
-	mov ebx,ebp
-	pop bp
-	pop di
 	mov bp,1
 	jmp .exit
 .got_sz	push eax
 	mov cl,[cs:ext2.log_block_size]
 	add cl,10
 	xor eax,eax
-	shrd eax,ebx,cl
-	shr ebx,cl
+	shrd eax,ebp,cl
+	shr ebp,cl
 	test eax,eax
 	jnz .noceil
-	inc ebx
+	inc ebp
 .noceil	pop eax
-	push di
-	push bp
-	mov di,si	; inode entry = edx:eax (sectors) + di (bytes)
-	pop cx
-	pop si
+	xor ebx,ebx
+	mov ecx,ebp
+	xchg di,si	; inode entry = edx:eax (sectors) + di (bytes)
 	add di,36
 	jnc .nc2
 	sub di,[cs:bytes_per_sect]
@@ -450,6 +451,11 @@ _ext2_find_inode:	; ds:si -> name
 	jmp .exit
 .cont	push eax
 	mov eax,ebp
+	push di
+	shr edi,16
+	xchg cx,di
+	shl edi,16
+	pop di
 	call _ext2_find_inode_in_block
 	jc .nof
 	pop ebp
@@ -468,16 +474,34 @@ _ext2_find_inode:	; ds:si -> name
 	sub di,[cs:bytes_per_sect]
 	add eax,1
 	adc edx,0
-.nc3	dec bp
+.nc3	push di
+	shr edi,16
+	xchg cx,di
+	shl edi,16
+	pop di
+	sub ecx,1
+	sbb ebx,0
+	js .lp_dn
+	test ecx,ecx
+	jnz .noz
+	test ebx,ebx
+	jz .lp_dn
+.noz	dec bp
 	jnz .loop
 	; edx:eax (s) + di (b) -> singly indirect pointer
+.lp_dn	push di
+	shr edi,16
+	xchg cx,di
+	shl edi,16
+	pop di
 	push cx
 	push si
 	push ds
 	sub esp,4
 	mov si,sp
-	xor ecx,ecx
-	xchg ebx,ecx
+	mov cx,di
+	shr edi,16
+	xchg cx,di
 	push edx
 	push eax
 	push di
@@ -496,7 +520,6 @@ _ext2_find_inode:	; ds:si -> name
 	; eax = block pointer
 	; ebx:ecx = size in blocks
 	call _ext2_foreach_block	; singly indirect
-	;shl edi,16
 	pop di
 	pop eax
 	pop edx
@@ -541,7 +564,6 @@ _ext2_find_inode:	; ds:si -> name
 	pop ds
 	mov si,_ext2_foreach_block_wrapper
 	call _ext2_foreach_block	; doubly indirect
-	;
 	pop di
 	pop eax
 	pop edx
@@ -580,17 +602,11 @@ _ext2_find_inode:	; ds:si -> name
 	mov di,sp
 	push ss
 	pop es
-	;push edx
-	;push eax
-	;push si
 	mov eax,ebp
 	push cs
 	pop ds
 	mov si,_ext2_foreach_block_wrapper
 	call _ext2_foreach_block	; trebly indirect
-	;pop ax
-	;pop eax
-	;pop eax
 	pushf
 	pop edx
 	add sp,16
@@ -637,7 +653,7 @@ _ext2_foreach_block_wrapper:
 	jz .exit
 	xor bp,bp
 	stc
-.exit	ret
+.exit	retf
 _ext2_foreach_block:	;  indirect block pointer in eax
 			;  maximum number of blocks to read in ebx:ecx
 			;  (does not read more than the number of blocks in a block)
@@ -773,7 +789,7 @@ _ext2_find_inode_in_block_wrapper:
 .nof	test bp,bp
 	jnz .err
 	clc
-.err	ret
+.err	retf
 _ext2_find_inode_in_block:
 			; block address in eax
 			; ds:si -> name
@@ -1095,18 +1111,147 @@ ext2_load_file_relative:	; ds:si -> path
 .exit:	;
 	ret
 
+_ext2_get_inode_size:		; eax is the inode of the file to get the size of
+				; returns the filesize in edx:eax
+				; Carry Flag (CF) set on error
+	cmp BYTE [cs:ext2.initialized],0
+	jne .start
+	stc
+	ret
+.start	push ebx
+	push ecx
+	push ebp
+	push si
+	xor edx,edx
+	dec eax
+	div DWORD [cs:ext2.inodes_per_group]
+	push edx ; save remainder for later
+	mov edx,32
+	mul edx
+	add eax,8
+	adc edx,0
+	movzx ecx,WORD [cs:bytes_per_sect]
+	div ecx
+	mov ebx,eax
+	mov cx,dx	; divided by a WORD so the remainder is also a WORD
+	mov ax,[cs:ext2.block_bytes_rem]
+	movzx bp,BYTE [cs:ext2.bgdt]
+	mul bp
+	mov bp,WORD [cs:bytes_per_sect]
+	div bp
+	push dx
+	push ax
+	mov eax,[cs:ext2.sect_per_block]
+	movzx ebp,BYTE [cs:ext2.bgdt]
+	mul ebp
+	xor ebp,ebp
+	pop bp
+	add eax,ebp
+	adc edx,0
+	pop si
+	add eax,[cs:ext2.start_LBA]
+	adc edx,0
+	add eax,ebx
+	adc edx,0
+	add si,cx
+	jc .noc
+	sub si,[cs:bytes_per_sect]
+	add eax,1
+	adc edx,0
+.noc	call _load_dword_from_LBA
+	jnc .rd_bgt
+	pop edx
+	jmp .exit
+.rd_bgt	push ebp
+	mov eax,ebp
+	movzx ecx,WORD [cs:ext2.block_bytes_rem]
+	mul ecx
+	movzx ecx,WORD [cs:bytes_per_sect]
+	div ecx
+	mov si,dx
+	mov ebx,eax
+	pop eax
+	mov ecx,[cs:ext2.sect_per_block]
+	mul ecx
+	add eax,ebx
+	adc edx,0
+	add eax,[cs:ext2.start_LBA]
+	adc edx,0
+	mov ecx,eax
+	mov ebx,edx	; inode table start = ebx:ecx (sectors) + si (bytes)
+	pop eax
+	movzx ebp,WORD [cs:ext2.inode_size]
+	mul ebp
+	movzx ebp,WORD [cs:bytes_per_sect]
+	div ebp
+	add si,dx
+	jnc .nc
+	sub si,[cs:bytes_per_sect]
+	add ecx,1
+	adc ebx,0
+.nc	add ecx,eax
+	adc ebx,0
+	mov eax,ecx
+	mov edx,ebx
+	add si,4
+	jnc .nc1
+	sub si,[cs:bytes_per_sect]
+	add eax,1
+	adc edx,0	; inode entry = edx:eax (sectors) + si (bytes)
+.nc1	call _load_dword_from_LBA
+	jc .exit
+	cmp BYTE [cs:ext2.size64],0
+	jnz .fs64
+	xor edx,edx
+	mov eax,ebp
+	clc
+	jmp .exit
+.fs64	mov ecx,ebp
+	sub si,4
+	jnc .nc2
+	add si,[cs:bytes_per_sect]
+	sub eax,1
+	sbb edx,0
+.nc2	call _load_word_from_LBA
+	jc .exit
+	and ebp,0x4000
+	jz .file
+	xor edx,edx
+	mov eax,ecx
+	clc
+	jmp .exit
+.file	add si,108
+	jnc .nc3
+	sub si,[cs:bytes_per_sect]
+	add eax,1
+	adc edx,0
+.nc3	call _load_dword_from_LBA
+	jc .exit
+	mov eax,ecx
+	mov edx,ebp
+	clc
+.exit	pop si
+	pop ebp
+	pop ecx
+	pop ebx
+	ret
+
 ext2_get_file_size:		; ds:si -> path
 				; cx is the length of the path
-				; returns file size in eax
+				; returns file size in edx:eax
 				; Carry Flag (CF) set on error
+				;  if bp is zero, the file was not found
+				;  if bp is nonzero, there was some other error
 	cmp BYTE [cs:ext2.initialized],0
 	jne .start
 	mov bp,1
 	stc
 	ret
-.start:	;
-.exit:	;
-	ret
+.start:	call _ext2_find_path_absolute
+	jc .exit
+	call _ext2_get_inode_size
+	mov bp,1
+.exit:	ret
 
 ; EXT2_INCLUDED
 %endif
