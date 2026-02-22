@@ -259,6 +259,7 @@ _ext2_find_path_absolute:
 	push cx
 	push es
 	push di
+	push ebx
 	test cx,cx
 	mov bp,1
 	stc
@@ -290,6 +291,7 @@ _ext2_find_path_relative:	; ds:si -> path
 	push cx
 	push es
 	push di
+	push ebx
 	test cx,cx
 	mov bp,1
 	stc
@@ -299,7 +301,7 @@ _ext2_find_path_relative:	; ds:si -> path
 .loop	push eax
 	call path_next_part
 	test ax,ax
-	pop ebp
+	pop ebx
 	mov bp,1
 	stc
 	jz .exit
@@ -310,7 +312,7 @@ _ext2_find_path_relative:	; ds:si -> path
 	mov ax,es
 	mov ds,ax
 	mov si,di
-	mov eax,ebp
+	mov eax,ebx
 	call _ext2_find_inode
 	pop cx
 	pop si
@@ -319,7 +321,8 @@ _ext2_find_path_relative:	; ds:si -> path
 	test cx,cx
 	jnz .loop
 	clc
-.exit	pop di
+.exit	pop ebx
+	pop di
 	pop es
 	pop cx
 	pop si
