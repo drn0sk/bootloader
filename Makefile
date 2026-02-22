@@ -8,12 +8,12 @@ all : $(BUILD_DIR)/bootstrap $(BUILD_DIR)/stage2
 
 $(BUILD_DIR)/bootstrap : bootstrap.asm
 	mkdir -p $(BUILD_DIR)
-	nasm -f bin -o $(BUILD_DIR)/bootstrap bootstrap.asm
+	nasm -f bin $(if $(BOOTSTRAP_LISTING),-l '$(BUILD_DIR)/$(BOOTSTRAP_LISTING)') -o $(BUILD_DIR)/bootstrap bootstrap.asm
 
 BOOTLOADER_PATH = /boot.bin
 $(BUILD_DIR)/stage2 : stage2.asm disk_read.asm fs.asm fat16.asm ext2.asm paths.asm print.asm string.asm
 	mkdir -p $(BUILD_DIR)
-	nasm -f bin -o $(BUILD_DIR)/stage2 -d'BOOTLOADER=$(BOOTLOADER_PATH)' stage2.asm
+	nasm -f bin $(if $(STAGE2_LISTING),-l '$(BUILD_DIR)/$(STAGE2_LISTING)') -o $(BUILD_DIR)/stage2 -d'BOOTLOADER=$(BOOTLOADER_PATH)' stage2.asm
 
 clean :
 	-rm -r $(BUILD_DIR)
