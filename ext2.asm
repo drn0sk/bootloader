@@ -420,10 +420,10 @@ _ext2_find_inode:	; ds:si -> name
 	jnc .type
 	mov bp,1
 	jmp .exit
-.type	test bp,0x4000
-	mov bp,1
+.type	test bp,0x4000	; error if parent directory is not an actual directory
+	xor bp,bp	; treated as not found
 	stc
-	jz .exit	; error if parent directory is not an actual directory
+	jz .exit
 	add si,4
 	jnc .nc1
 	sub si,[cs:bytes_per_sect]
