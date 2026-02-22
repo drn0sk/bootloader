@@ -3,17 +3,18 @@
 .PHONY : all clean install_bootstrap install_stage2 install
 
 BUILD_DIR = build
+DEBUG_DIR = debug
 
 all : $(BUILD_DIR)/bootstrap $(BUILD_DIR)/stage2 $(BUILD_DIR)/loader
 
 $(BUILD_DIR)/bootstrap : bootstrap.asm
 	mkdir -p $(BUILD_DIR)
-	nasm -f bin $(if $(BOOTSTRAP_LISTING),-l '$(BUILD_DIR)/$(BOOTSTRAP_LISTING)') -o $(BUILD_DIR)/bootstrap bootstrap.asm
+	nasm -f bin $(if $(BOOTSTRAP_LISTING),-l '$(DEBUG_DIR)/$(BOOTSTRAP_LISTING)') -o $(BUILD_DIR)/bootstrap bootstrap.asm
 
 BOOTLOADER_PATH = /boot.bin
 $(BUILD_DIR)/stage2 : stage2.asm disk_read.asm fs.asm fat16.asm paths.asm print.asm string.asm
 	mkdir -p $(BUILD_DIR)
-	nasm -f bin $(if $(STAGE2_LISTING),-l '$(BUILD_DIR)/$(STAGE2_LISTING)') -o $(BUILD_DIR)/stage2 -d'BOOTLOADER=$(BOOTLOADER_PATH)' stage2.asm
+	nasm -f bin $(if $(STAGE2_LISTING),-l '$(DEBUG_DIR)/$(STAGE2_LISTING)') -o $(BUILD_DIR)/stage2 -d'BOOTLOADER=$(BOOTLOADER_PATH)' stage2.asm
 
 CONFIG_PATH = /boot.conf
 $(BUILD_DIR)/loader : bootloader.asm disk_read.asm fs.asm fat16.asm paths.asm print.asm string.asm
