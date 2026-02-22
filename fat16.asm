@@ -382,6 +382,10 @@ _fat16_find_dir_entry_in_subdir:
 	push si
 	push es
 	push di
+	test BYTE [es:di+11],0x10
+	stc
+	mov bp,1
+	jz .exit	; error if parent directory is not an actual directory
 	mov WORD [cs:.params+_fat16_find_params.filename_len],cx
 	mov cx,[es:di+26]	; starting cluster
 	mov WORD [cs:.params+_fat16_find_params.filename_seg],ds
