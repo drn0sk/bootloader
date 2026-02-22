@@ -416,6 +416,14 @@ _ext2_find_inode:	; ds:si -> name
 	adc ebx,0
 	mov eax,ecx
 	mov edx,ebx
+	call _load_word_from_LBA
+	jnc .type
+	mov bp,1
+	jmp .exit
+.type	test bp,0x4000
+	mov bp,1
+	stc
+	jz .exit	; error if parent directory is not an actual directory
 	add si,4
 	jnc .nc1
 	sub si,[cs:bytes_per_sect]
