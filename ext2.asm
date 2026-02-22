@@ -1225,7 +1225,7 @@ _ext2_get_inode_size:		; eax is the inode of the file to get the size of
 	sbb edx,0
 .nc2	call _load_word_from_LBA
 	jc .exit
-	and ebp,0x4000
+	test bp,0x4000
 	jz .file
 	xor edx,edx
 	mov eax,ecx
