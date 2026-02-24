@@ -162,8 +162,8 @@ ext2_init:
 	jnz .l1
 	inc BYTE [cs:ext2.bgdt]
 .l1	mov ecx,ebp
-	cmp ecx,54	; we can't shift by 54 or more
 	stc
+	cmp ecx,54	; we can't shift by 54 or more
 	jnb .exit
 	mov [cs:ext2.log_block_size],cl
 	mov eax,1024
@@ -421,8 +421,8 @@ _ext2_find_inode:	; ds:si -> name
 	jnc .type
 	mov bp,1
 	jmp .exit
-.type	test bp,0x4000	; error if parent directory is not an actual directory
-	xor bp,bp	; treated as not found
+.type	xor bp,bp	; treated as not found
+	test bp,0x4000	; error if parent directory is not an actual directory
 	stc
 	jz .exit
 	add si,4
@@ -1761,14 +1761,14 @@ _ext2_load_block_of_file:	; block pointer in eax
 	sub bx,bp
 	jns .nos
 	add bx,[cs:bytes_per_sect]
-	dec cx
 	stc
+	dec cx
 	js .exit
 .nos	sub dx,bp
 	jns .nos2
 	add dx,[cs:bytes_per_sect]
-	dec eax
 	stc
+	dec eax
 	js .exit
 .nos2	test cx,cx
 	jnz .notdon
