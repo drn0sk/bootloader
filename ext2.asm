@@ -15,13 +15,12 @@ _load_byte_from_LBA:	; loads a byte at LBA (edx:eax) + byte offset (si)
 	mov ax,si
 	div WORD [cs:bytes_per_sect]	; quotient in ax, remainder in dx
 	mov cx,dx	; move remainder to cx
-	xor bx,bx
+	xor ebx,ebx
 	mov bx,ax	; move quotient to bx
 	pop eax
 	pop edx
 	push edx
 	push eax
-	;movzx ebx,bx
 	add eax,ebx
 	adc edx,0
 	push cx
@@ -57,13 +56,12 @@ _load_word_from_LBA:	; loads a word at LBA (edx:eax) + byte offset (si) to bp
 	mov ax,si
 	div WORD [cs:bytes_per_sect]	; quotient in ax, remainder in dx
 	mov cx,dx	; move remainder to cx
-	xor bx,bx
+	xor ebx,ebx
 	mov bx,ax	; move quotient to bx
 	pop eax
 	pop edx
 	push edx
 	push eax
-	;movzx ebx,bx
 	add eax,ebx
 	adc edx,0
 	push cx
@@ -97,13 +95,12 @@ _load_dword_from_LBA:	; loads a dword at LBA (edx:eax) + byte offset (si) to ebp
 	mov ax,si
 	div WORD [cs:bytes_per_sect]	; quotient in ax, remainder in dx
 	mov cx,dx	; move remainder to cx
-	xor bx,bx
+	xor ebx,ebx
 	mov bx,ax	; move quotient to bx
 	pop eax
 	pop edx
 	push edx
 	push eax
-	;movzx ebx,bx
 	add eax,ebx
 	adc edx,0
 	push cx
@@ -848,7 +845,6 @@ _ext2_find_inode_in_block:
 	pop eax
 	pop edx
 	jmp .exit
-	;pop ecx
 .l0	mov bp,dx	; remainder <= a WORD
 	mov ecx,eax
 	pop eax
@@ -1119,9 +1115,6 @@ _ext2_load_inode:	; inode of file to load in eax
 	push ebp
 	push ebx
 	push ecx
-	;mov di,cx
-	;shl edi,16
-	;mov di,si
 	xor edx,edx
 	dec eax
 	div DWORD [cs:ext2.inodes_per_group]
@@ -1238,21 +1231,19 @@ _ext2_load_inode:	; inode of file to load in eax
 	mov bp,1
 	jmp .exit
 .sz64	mov ebx,ebp
-	cmp ebx,[ss:sp+4]
+	cmp ebx,[ss:esp+4]
 	jne .h
-	cmp ecx,[ss:sp]
+	cmp ecx,[ss:esp]
 .h	jbe .load
-	mov ebx,[ss:sp+4]
-	mov ecx,[ss:sp]
+	mov ebx,[ss:esp+4]
+	mov ecx,[ss:esp]
 .load	add sp,8
-	sub si,104-36	; inode entry = edx:eax (sectors) + si (bytes)
+	sub si,68	; inode entry = edx:eax (sectors) + si (bytes)
 	jnc .nc6
 	add si,[cs:bytes_per_sect]
 	sub eax,1
 	sbb edx,0
 .nc6	mov bp,12
-	;push ebx
-	;push ecx
 	push eax
 	push edx
 	mov eax,ecx
@@ -1265,8 +1256,6 @@ _ext2_load_inode:	; inode of file to load in eax
 	pop eax
 	cmp ecx,0xFFFF
 	jbe .loop
-	;pop ecx
-	;pop ebx
 	stc
 	mov bp,1
 	jmp .exit
@@ -1278,23 +1267,14 @@ _ext2_load_inode:	; inode of file to load in eax
 	jmp .exit
 .cont	push eax
 	mov eax,ebp
-	;push di
-	;shr edi,16
-	;xchg cx,di
-	;shl edi,16
-	;pop di
 	call _ext2_load_block_of_file
 	jnc .rdok
 	pop ebp
 	pop bp
-	;pop ecx
-	;pop ebx
 	jmp .exit	; error
 .rdok	test ax,ax
 	pop eax
 	pop bp
-	;pop ecx
-	;pop ebx
 	jnz .exit	; file loaded
 	; did not finish loading file
 	add si,4
@@ -1302,12 +1282,7 @@ _ext2_load_inode:	; inode of file to load in eax
 	sub si,[cs:bytes_per_sect]
 	add eax,1
 	adc edx,0
-.nc7	;push di
-	;shr edi,16
-	;xchg cx,di
-	;shl edi,16
-	;pop di
-	push ax
+.nc7	push ax
 	push dx
 	xor dx,dx
 	mov ax,cx
@@ -1320,9 +1295,6 @@ _ext2_load_inode:	; inode of file to load in eax
 	adc ebx,0
 	pop dx
 	pop ax
-	;sub ecx,1
-	;sbb ebx,0
-	;js .lp_dn
 	test ecx,ecx
 	jnz .noz
 	test ebx,ebx
@@ -1330,12 +1302,7 @@ _ext2_load_inode:	; inode of file to load in eax
 .noz	dec bp
 	jnz .loop
 	; edx:eax (s) + di (b) -> singly indirect pointer
-.lp_dn	;push di
-	;shr edi,16
-	;xchg cx,di
-	;shl edi,16
-	;pop di
-	push di
+.lp_dn	push di
 	push es
 	push eax
 	push edx
@@ -1357,9 +1324,6 @@ _ext2_load_inode:	; inode of file to load in eax
 	push bp
 	sub esp,2
 	mov di,sp
-	;mov cx,di
-	;shr edi,16
-	;xchg cx,di
 	push edx
 	push eax
 	mov ebp,ecx
@@ -1629,11 +1593,11 @@ _ext2_load_block_of_file:	; block pointer in eax
 	cmp bp,cx
 	jae .bigger
 	mov cx,bp
-.bigger	cmp DWORD [ss:sp+10],0
+.bigger	cmp DWORD [ss:esp+10],0
 	jne .big
-	cmp [ss:sp+8],cx
+	cmp [ss:esp+8],cx
 	jae .big
-	mov cx,[ss:sp+8]
+	mov cx,[ss:esp+8]
 .big	push cx
 	push es
 	push di
@@ -1663,9 +1627,9 @@ _ext2_load_block_of_file:	; block pointer in eax
 .bor	add bx,[cs:bytes_per_sect]
 .more	add eax,1
 	adc edx,0
-	sub [ss:sp+8],bp
+	sub [ss:esp+8],bp
 	jg .noborr
-	dec DWORD [ss:sp+10]
+	dec DWORD [ss:esp+10]
 	jns .borr
 	clc
 	pop eax
@@ -1673,7 +1637,10 @@ _ext2_load_block_of_file:	; block pointer in eax
 	xor ax,ax
 	add sp,6
 	jmp .exit
-.borr	add [ss:sp+8],[cs:bytes_per_sect]
+.borr	push ax
+	mov ax,[cs:bytes_per_sect]
+	add [ss:esp+8],ax
+	pop ax
 .noborr	push ecx
 	push ebx
 	push es
@@ -1684,14 +1651,14 @@ _ext2_load_block_of_file:	; block pointer in eax
 	pop ecx
 	test cx,cx
 	jz .rem
-	push ebx
 	push ecx
+	push ebx
 	movzx ecx,cx
-	cmp ecx,[ss:sp+10]
+	cmp ecx,[ss:esp+10]
 	jbe .less
-	; cx > [ss:sp+10]
-	; so [ss:sp+10] fits in a WORD
-	mov cx,[ss:sp+10]
+	; cx > [ss:esp+10]
+	; so [ss:esp+10] fits in a WORD
+	mov cx,[ss:esp+10]
 .less	mov bl,[cs:ext2.drive_num]
 	call read
 	jnc .rd_ok2
@@ -1714,7 +1681,8 @@ _ext2_load_block_of_file:	; block pointer in eax
 	pop ecx
 	add sp,6
 	jmp .exit
-.ok2	add eax,cx
+.ok2	movzx ecx,cx
+	add eax,ecx
 	adc edx,0
 	movzx ebp,cx
 	pop ebx
@@ -1727,36 +1695,36 @@ _ext2_load_block_of_file:	; block pointer in eax
 	add sp,6
 	clc
 	jmp .exit
-.ck_bk	sub [ss:sp+2],ebp
+.ck_bk	sub [ss:esp+2],ebp
 	jnz .rem
-	cmp WORD [ss:sp],0
+	cmp WORD [ss:esp],0
 	jne .rem
 	xor ax,ax
 	add sp,6
 	clc
 	jmp .exit
-.rem	push ebx
-	push ecx
+.rem	push ecx
+	push ebx
 	movzx ecx,cx
-	cmp ecx,[ss:sp+10]
+	cmp ecx,[ss:esp+10]
 	jne .neq
-	cmp bx,[ss:sp+8]
+	cmp bx,[ss:esp+8]
 .neq	ja .blkend
 	test cx,cx
 	jz .rd_rm
-	pop ecx
 	pop ebx
+	pop ecx
 	add sp,6
 	stc
 	jmp .exit	; this shouldn't happen
-.blkend	cmp DWORD [ss:sp+10],0
+.blkend	cmp DWORD [ss:esp+10],0
 	jne .sectok
-	pop ecx
 	pop ebx
+	pop ecx
 	add sp,6
 	stc
 	jmp .exit	; this shouldn't happen
-.sectok	mov bx,[ss:sp+8]
+.sectok	mov bx,[ss:esp+8]
 .rd_rm	push es
 	push di
 	push WORD [cs:_buff.seg]
@@ -1771,8 +1739,8 @@ _ext2_load_block_of_file:	; block pointer in eax
 	mov si,di
 	pop di
 	pop es
-	pop ecx
 	pop ebx
+	pop ecx
 	pop dx
 	pop eax
 	jc .exit
