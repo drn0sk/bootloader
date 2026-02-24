@@ -1094,6 +1094,347 @@ _ext2_find_inode_in_block:
 	pop ds
 	ret
 
+_ext2_load_block_of_file:	; block pointer in eax
+				; filesize: cx (sectors) + bx (bytes)
+				; es:di -> destination
+				; returns size left to load in cx,bx
+				; returns ax == 1 if done reading file
+				; returns ax == 0 otherwise
+				; Carry Flag (CF) set on error
+	cmp BYTE [cs:ext2.initialized],0
+	jne .start
+	stc
+	ret
+.start	;
+	test cx,cx
+	jnz .siz_ok
+	test bx,bx
+	jnz .siz_ok
+	clc
+	mov ax,1
+	jmp .exit
+.siz_ok	push edx
+	push ebp
+	push DWORD [cs:ext2.sect_per_block]
+	push WORD [cs:ext2.block_bytes_rem]
+	push ecx
+	push ebx
+	push es
+	push di
+	push eax
+	movzx ecx,WORD [cs:ext2.block_bytes_rem]
+	mul ecx
+	movzx ecx,WORD [cs:bytes_per_sect]
+	div ecx
+	mov ecx,eax
+	mov bx,dx	; divided by a WORD so remainder fits in a WORD
+	pop eax
+	mul DWORD [cs:ext2.sect_per_block]
+	add eax,ecx
+	adc edx,0
+	add eax,[cs:ext2.start_LBA]
+	adc edx,0
+	test bx,bx
+	jz .nox
+	push bx
+	push WORD [cs:_buff.seg]
+	pop es
+	mov di,[cs:_buff.off]
+	mov bl,[cs:ext2.drive_num]
+	mov cx,1
+	call read
+	pop bx
+	jnc .rd_ok
+	pop di
+	pop es
+	pop ebx
+	pop ecx
+	add sp,6
+	jmp .exit
+.rd_ok	add di,bx
+	mov cx,[cs:bytes_per_sect]
+	sub cx,bx
+	push es
+	pop ds
+	mov si,di
+	pop di
+	pop es
+	pop ebp
+	pop ebx
+	push ebx
+	push ebp
+	test bx,bx
+	jnz .bigger
+	cmp bp,cx
+	jae .bigger
+	mov cx,bp
+.bigger	cmp DWORD [ss:sp+10],0
+	jne .big
+	cmp [ss:sp+8],cx
+	jae .big
+	mov cx,[ss:sp+8]
+.big	push cx
+	push es
+	push di
+	cld
+	rep movsb
+	pop di
+	pop es
+	pop cx
+	push WORD 0
+	push es
+	shl DWORD [ss:sp],4
+	add [ss:sp],di
+	adc WORD [ss:sp+2],0
+	add [ss:sp],cx
+	adc WORD [ss:sp+2],0
+	cmp DWORD [ss:sp],0x10FFEF	; maximum amount of addressable memory
+	jbe .noc
+	add sp,4
+	pop ebx
+	pop ecx
+	add sp,6
+	stc
+	jmp .exit
+.noc	mov di,[ss:sp]
+	mov WORD [ss:sp],0
+	shr DWORD [ss:sp],4
+	cmp DWORD [ss:sp],0xFFFF
+	jbe .sm
+	dec DWORD [ss:sp]
+	add di,0x10
+	jc .bad
+	cmp DWORD [ss:sp],0xFFFF
+	ja .bad
+	jmp .sm
+.bad	add sp,4
+	pop ebx
+	pop ecx
+	add sp,6
+	stc
+	jmp .exit	; this shouldn't happen
+.sm	pop es
+	add sp,2
+	add eax,1
+	adc edx,0
+	sub [ss:sp+8],cx
+	jg .noborr
+	dec DWORD [ss:sp+10]
+	jns .borr
+	clc
+	xor ax,ax
+	pop ebx
+	pop ecx
+	add sp,6
+	jmp .exit
+.borr	add [ss:sp+8],[cs:bytes_per_sect]
+.noborr	pop ebx
+	sub bx,cx
+	pop ecx
+	jg .more
+	dec cx
+	jns .bor
+	clc
+	mov ax,1
+	add sp,6
+	jmp .exit
+.bor	add bx,[cs:bytes_per_sect]
+.more	push ecx
+	push ebx
+	push es
+	push di
+.nox	pop di
+	pop es
+	pop ebx
+	pop ecx
+	test cx,cx
+	jz .rem
+	push ebx
+	push ecx
+	movzx ecx,cx
+	cmp ecx,[ss:sp+10]
+	jbe .less
+	; cx > [ss:sp+10]
+	; so [ss:sp+10] fits in a WORD
+	mov cx,[ss:sp+10]
+.less	mov bl,[cs:ext2.drive_num]
+	call read
+	jnc .rd_ok2
+	pop ebx
+	pop ecx
+	add sp,6
+	jmp .exit
+.rd_ok2	push eax
+	push edx
+	mov ax,[cs:bytes_per_sect]
+	mul cx
+	shl edx,16
+	mov dx,ax
+	xor eax,eax
+	mov ax,es
+	shl eax,4
+	movzx ebp,di
+	add eax,ebp
+	add edx,eax	; edx = bytes read, eax = current address
+	cmp edx,0x10FFEF	; maximum amount of memory addressable in real mode
+	jbe .ok
+	pop edx
+	pop eax
+	pop ebx
+	pop ecx
+	add sp,6
+	stc
+	jmp .exit
+.ok	mov di,dx
+	xor dx,dx
+	shr edx,4
+	cmp edx,0xFFFF
+	jbe .small
+	dec edx
+	add di,0x10
+	jc .bad2
+	cmp edx,0xFFFF
+	ja .bad2
+	jmp .small
+.bad2	pop edx
+	pop eax
+	pop ebx
+	pop ecx
+	add sp,6
+	stc
+	jmp .exit	; this shouldn't happen
+.small	mov es,dx
+	pop edx
+	pop eax
+	add eax,cx
+	adc edx,0
+	movzx ebp,cx
+	pop ebx
+	pop ecx
+	sub [ss:sp+2],ebp
+	jnz .cont
+	cmp WORD [ss:sp],0
+	jne .cont
+	xor ax,ax
+	cmp cx,bp
+	jne .not_dn
+	test bx,bx
+	jnz .not_dn
+	mov ax,1
+.not_dn	add sp,6
+	clc
+	jmp .exit
+.cont	sub cx,bp
+.rem	push ebx
+	push ecx
+	movzx ecx,cx
+	cmp ecx,[ss:sp+10]
+	jne .neq
+	cmp bx,[ss:sp+8]
+.neq	ja .blkend
+	test cx,cx
+	jz .rd_rm
+	pop ecx
+	pop ebx
+	add sp,6
+	stc
+	jmp .exit	; this shouldn't happen
+.blkend	cmp DWORD [ss:sp+10],0
+	jne .sectok
+	pop ecx
+	pop ebx
+	add sp,6
+	stc
+	jmp .exit	; this shouldn't happen
+.sectok	mov bx,[ss:sp+8]
+.rd_rm	push es
+	push di
+	push WORD [cs:_buff.seg]
+	pop es
+	mov di,[cs:_buff.off]
+	mov bp,bx
+	mov cx,1
+	mov bl,[cs:ext2.drive_num]
+	call read
+	push es
+	pop ds
+	mov si,di
+	pop di
+	pop es
+	pop ecx
+	pop ebx
+	pop dx
+	pop eax
+	jc .exit
+	push cx
+	push es
+	push di
+	mov cx,bp
+	cld
+	rep movsb
+	pop di
+	pop es
+	pop cx
+	push WORD 0
+	push es
+	shl DWORD [ss:sp],4
+	add [ss:sp],di
+	adc WORD [ss:sp+2],0
+	add [ss:sp],bp
+	adc WORD [ss:sp+2],0
+	cmp DWORD [ss:sp],0x10FFEF	; maximum amount of addressable memory
+	jbe .noc2
+	add sp,4
+	stc
+	jmp .exit
+.noc2	mov di,[ss:sp]
+	mov WORD [ss:sp],0
+	shr DWORD [ss:sp],4
+	cmp DWORD [ss:sp],0xFFFF
+	jbe .sm2
+	dec DWORD [ss:sp]
+	add di,0x10
+	jc .bad2
+	cmp DWORD [ss:sp],0xFFFF
+	ja .bad2
+	jmp .sm2
+.bad2	add sp,4
+	stc
+	jmp .exit	; this shouldn't happen
+.sm2	pop es
+	add sp,2
+	sub bx,bp
+	jns .nos
+	add bx,[cs:bytes_per_sect]
+	dec cx
+	stc
+	js .exit
+.nos	sub dx,bp
+	jns .nos2
+	add dx,[cs:bytes_per_sect]
+	dec eax
+	stc
+	js .exit
+.nos2	test cx,cx
+	jnz .notdon
+	test bx,bx
+	jnz .notdon
+	clc
+	mov ax,1
+	jmp .exit
+.notdon	test eax,eax
+	stc
+	jnz .exit
+	test dx,dx
+	stc
+	jnz .exit
+	xor ax,ax
+	clc
+.exit	;
+	pop ebp
+	pop edx
+	ret
+
 ext2_load_file:
 ext2_load_file_absolute:	; ds:si -> path
 				; cx is the length of the path
