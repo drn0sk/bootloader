@@ -276,7 +276,7 @@ _ext2_find_path_absolute:
 _ext2_find_path:
 _ext2_find_path_relative:	; ds:si -> path
 				; cx is the length of the path
-				; eax is the inode of the directory to look in (2 to look in the root dir) (only needed if path is relative)
+				; eax is the inode of the directory to look in (2 to look in the root dir) (only needed if the path is relative)
 				; returns inode in eax
 				; Carry Flag (CF) set on error
 				;  if bp is zero, the file was not found
@@ -341,7 +341,11 @@ _ext2_find_inode:	; ds:si -> name
 	mov bp,1
 	stc
 	ret
-.start	mov di,cx
+.start	push es
+	push di
+	push edx
+	push ebx
+	mov di,cx
 	shl edi,16
 	mov di,si
 	xor edx,edx
@@ -633,7 +637,11 @@ _ext2_find_inode:	; ds:si -> name
 	test dx,dx
 	jz .exit
 	clc
-.exit	ret
+.exit	pop ebx
+	pop edx
+	pop di
+	pop es
+	ret
 
 _ext2_foreach_block_wrapper:
 			; wrapper to use _ext2_foreach_block in _ext2_foreach_block
@@ -777,7 +785,7 @@ _ext2_find_inode_in_block_wrapper:
 			;          ds (name segment),
 			;          si (name offset),
 			;          cx (name len)
-			; CF set and bp = 0 -> file found (inode in eax)
+			; CF set and bp == 0 -> file found (inode in eax)
 			; CF set and bp != 0 -> some error
 			; CF unset -> file not found
 	push ds
@@ -1094,18 +1102,473 @@ _ext2_find_inode_in_block:
 	pop ds
 	ret
 
+; loads ebx:ecx bytes of file with inode eax into es:di
+; sets CF on error
+_ext2_load_inode:	; inode of file to load in eax
+			; es:di -> buffer to load file to
+			; size of buffer in ebx:ecx
+			; Carry Flag (CF) set on error
+	cmp BYTE [cs:ext2.initialized],0
+	jne .start
+	mov bp,1
+	stc
+	ret
+.start	push ds
+	push si
+	push edx
+	push ebp
+	push ebx
+	push ecx
+	;mov di,cx
+	;shl edi,16
+	;mov di,si
+	xor edx,edx
+	dec eax
+	div DWORD [cs:ext2.inodes_per_group]
+	push edx ; save remainder for later
+	mov edx,32
+	mul edx
+	add eax,8
+	adc edx,0
+	movzx ecx,WORD [cs:bytes_per_sect]
+	div ecx
+	mov ebx,eax
+	mov cx,dx	; divided by a WORD so the remainder is also a WORD
+	mov ax,[cs:ext2.block_bytes_rem]
+	movzx bp,BYTE [cs:ext2.bgdt]
+	mul bp
+	mov bp,WORD [cs:bytes_per_sect]
+	div bp
+	push dx
+	push ax
+	mov eax,[cs:ext2.sect_per_block]
+	movzx ebp,BYTE [cs:ext2.bgdt]
+	mul ebp
+	xor ebp,ebp
+	pop bp
+	add eax,ebp
+	adc edx,0
+	pop si
+	add eax,[cs:ext2.start_LBA]
+	adc edx,0
+	add eax,ebx
+	adc edx,0
+	add si,cx
+	jnc .nc
+	sub si,[cs:bytes_per_sect]
+	add eax,1
+	adc edx,0
+.nc	call _load_dword_from_LBA
+	jnc .rd_bgt
+	pop edx
+	pop ecx
+	pop ebx
+	mov bp,1
+	jmp .exit
+.rd_bgt	push ebp
+	mov eax,ebp
+	movzx ecx,WORD [cs:ext2.block_bytes_rem]
+	mul ecx
+	movzx ecx,WORD [cs:bytes_per_sect]
+	div ecx
+	mov si,dx
+	mov ebx,eax
+	pop eax
+	mov ecx,[cs:ext2.sect_per_block]
+	mul ecx
+	add eax,ebx
+	adc edx,0
+	add eax,[cs:ext2.start_LBA]
+	adc edx,0
+	mov ecx,eax
+	mov ebx,edx	; inode table start = ebx:ecx (sectors) + si (bytes)
+	pop eax
+	movzx ebp,WORD [cs:ext2.inode_size]
+	mul ebp
+	movzx ebp,WORD [cs:bytes_per_sect]
+	div ebp
+	add si,dx
+	jnc .nc2
+	sub si,[cs:bytes_per_sect]
+	add ecx,1
+	adc ebx,0
+.nc2	add ecx,eax
+	adc ebx,0
+	mov eax,ecx
+	mov edx,ebx
+	add si,4
+	jnc .nc3
+	sub si,[cs:bytes_per_sect]
+	add eax,1
+	adc edx,0	; inode entry = edx:eax (sectors) + si (bytes)
+.nc3	call _load_dword_from_LBA
+	jnc .got_sz
+	pop ecx
+	pop ebx
+	mov bp,1
+	jmp .exit
+.got_sz	cmp BYTE [cs:ext2.size64],0
+	jnz .fs64
+	xor ebx,ebx
+	mov ecx,ebp
+.fs64	mov ecx,ebp
+	sub si,4
+	jnc .nc4
+	add si,[cs:bytes_per_sect]
+	sub eax,1
+	sbb edx,0
+.nc4	call _load_word_from_LBA
+	jnc .got_tp
+	pop ecx
+	pop ebx
+	mov bp,1
+	jmp .exit
+.got_tp	test bp,0x4000
+	jz .file
+	xor ebx,ebx
+.file	add si,108
+	jnc .nc5
+	sub si,[cs:bytes_per_sect]
+	add eax,1
+	adc edx,0
+.nc5	call _load_dword_from_LBA
+	jnc .sz64
+	pop ecx
+	pop ebx
+	mov bp,1
+	jmp .exit
+.sz64	mov ebx,ebp
+	cmp ebx,[ss:sp+4]
+	jne .h
+	cmp ecx,[ss:sp]
+.h	jbe .load
+	mov ebx,[ss:sp+4]
+	mov ecx,[ss:sp]
+.load	add sp,8
+	sub si,104-36	; inode entry = edx:eax (sectors) + si (bytes)
+	jnc .nc6
+	add si,[cs:bytes_per_sect]
+	sub eax,1
+	sbb edx,0
+.nc6	mov bp,12
+	;push ebx
+	;push ecx
+	push eax
+	push edx
+	mov eax,ecx
+	mov edx,ebx
+	movzx ecx,WORD [cs:bytes_per_sect]
+	div ecx
+	mov ecx,eax
+	mov bx,dx
+	pop edx
+	pop eax
+	cmp ecx,0xFFFF
+	jbe .loop
+	;pop ecx
+	;pop ebx
+	stc
+	mov bp,1
+	jmp .exit
+.loop	push bp
+	call _load_dword_from_LBA
+	jnc .cont
+	pop bp
+	mov bp,1
+	jmp .exit
+.cont	push eax
+	mov eax,ebp
+	;push di
+	;shr edi,16
+	;xchg cx,di
+	;shl edi,16
+	;pop di
+	call _ext2_load_block_of_file
+	jnc .rdok
+	pop ebp
+	pop bp
+	;pop ecx
+	;pop ebx
+	jmp .exit	; error
+.rdok	test ax,ax
+	pop eax
+	pop bp
+	;pop ecx
+	;pop ebx
+	jnz .exit	; file loaded
+	; did not finish loading file
+	add si,4
+	jnc .nc7
+	sub si,[cs:bytes_per_sect]
+	add eax,1
+	adc edx,0
+.nc7	;push di
+	;shr edi,16
+	;xchg cx,di
+	;shl edi,16
+	;pop di
+	push ax
+	push dx
+	xor dx,dx
+	mov ax,cx
+	mul WORD [cs:bytes_per_sect]
+	mov cx,dx
+	shl ecx,16
+	movzx eax,bx
+	xor ebx,ebx
+	add ecx,eax
+	adc ebx,0
+	pop dx
+	pop ax
+	;sub ecx,1
+	;sbb ebx,0
+	;js .lp_dn
+	test ecx,ecx
+	jnz .noz
+	test ebx,ebx
+	jz .lp_dn
+.noz	dec bp
+	jnz .loop
+	; edx:eax (s) + di (b) -> singly indirect pointer
+.lp_dn	;push di
+	;shr edi,16
+	;xchg cx,di
+	;shl edi,16
+	;pop di
+	push di
+	push es
+	push eax
+	push edx
+	mov edx,ebx
+	mov eax,ecx
+	movzx ebp,WORD [cs:bytes_per_sect]
+	div ebp
+	mov di,dx
+	mov ebp,eax
+	pop edx
+	pop eax
+	cmp ebp,0xFFFF
+	jbe .qok
+	pop es
+	pop di
+	stc
+	jmp .exit
+.qok	push di
+	push bp
+	sub esp,2
+	mov di,sp
+	;mov cx,di
+	;shr edi,16
+	;xchg cx,di
+	push edx
+	push eax
+	mov ebp,ecx
+	mov cl,[cs:ext2.log_block_size]
+	add cl,10
+	xor eax,eax
+	shrd eax,ebp,cl
+	shrd ebp,ebx,cl
+	shr ebx,cl
+	test eax,eax
+	jnz .noceil
+	add ebp,1
+	adc ebx,0
+.noceil	mov ecx,ebp
+	push si
+	call _load_dword_from_LBA
+	jnc .gotp
+	add sp,20
+	mov bp,1
+	jmp .exit
+.gotp	mov eax,ebp
+	push cs
+	pop ds
+	mov si,_ext2_find_inode_in_block_wrapper
+	push ss
+	pop es
+	; eax = block pointer
+	; ebx:ecx = size in blocks
+	call _ext2_foreach_block	; singly indirect
+	pop si
+	pop eax
+	pop edx
+	jc .err
+	test bp,bp
+	jz .nof2
+	pop ax
+	pop cx
+	pop bx
+	pop es
+	pop di
+	clc
+	jmp .exit	; file loaded
+.err	pop bp
+	pop cx
+	pop bx
+	pop es
+	pop di
+	mov bp,1
+	jmp .exit
+.nof2	add si,4
+	jnc .nc8
+	sub si,[cs:bytes_per_sect]
+	add eax,1
+	adc edx,0
+.nc8	call _load_dword_from_LBA
+	jnc .ld_ok
+	add sp,10
+	mov bp,1
+	jmp .exit
+.ld_ok	push sp
+	push ss
+	push _ext2_find_inode_in_block_wrapper
+	push cs
+	mov di,sp
+	push ss
+	pop es
+	push edx
+	push eax
+	push si
+	mov eax,ebp
+	push cs
+	pop ds
+	mov si,_ext2_foreach_block_wrapper
+	call _ext2_foreach_block	; doubly indirect
+	pop si
+	pop eax
+	pop edx
+	jc .err2
+	test bp,bp
+	jz .nof3
+	add sp,8
+	pop ax
+	pop cx
+	pop bx
+	pop es
+	pop di
+	clc
+	jmp .exit	; file loaded
+.err2	add sp,8
+	pop bp
+	pop cx
+	pop bx
+	pop es
+	pop di
+	mov bp,1
+	jmp .exit
+.nof3	add si,4
+	jnc .nc9
+	sub si,[cs:bytes_per_sect]
+	add eax,1
+	adc edx,0
+.nc9	call _load_dword_from_LBA
+	jnc .ld_ok1
+	add sp,18
+	mov bp,1
+	jmp .exit
+.ld_ok1	push sp
+	push ss
+	push _ext2_find_inode_in_block_wrapper
+	push cs
+	mov di,sp
+	push ss
+	pop es
+	mov eax,ebp
+	push cs
+	pop ds
+	mov si,_ext2_foreach_block_wrapper
+	call _ext2_foreach_block	; trebly indirect
+	pushf
+	pop edx
+	add sp,16
+	pop ax
+	pop cx
+	pop bx
+	pop es
+	pop di
+	push edx
+	popf
+	mov dx,bp
+	mov bp,1
+	jc .exit
+	xor bp,bp
+	stc
+	test dx,dx
+	jz .exit
+	clc
+.exit	pop ebp
+	pop edx
+	pop si
+	pop ds
+	ret
+
+_ext2_load_block_of_file_wrapper:
+			; wrapper to use _ext2_load_block_of_file in
+			; _ext2_foreach_block
+			; block pointer in eax
+			; es:di -> args:
+			;          ax (1 if done reading else 0) (output),
+			;          cx (number of sectors) (input & output),
+			;          bx (number of bytes) (input & output),
+			;          es (destination segment) (input & output),
+			;          di (destination offset) (input & output)
+			; CF set and bp == 0 -> file loaded
+			; CF set and bp != 0 -> some error
+			; CF unset -> not done loading file
+	push ds
+	push si
+	push eax
+	push ebx
+	push ecx
+	push es
+	push di
+	mov cx,[es:di+2]
+	mov bx,[es:di+4]
+	push dx
+	mov dx,[es:di+6]
+	mov di,[es:di+8]
+	mov es,dx
+	pop dx
+	call _ext2_load_block_of_file
+	pop si
+	pop ds
+	mov [ds:si],ax
+	mov [ds:si+2],cx
+	mov [ds:si+4],bx
+	mov bx,es
+	mov [ds:si+6],bx
+	mov [ds:si+8],di
+	push ds
+	pop es
+	mov di,si
+	pop ecx
+	pop ebx
+	pop eax
+	pop si
+	pop ds
+	mov bp,1
+	jc .exit
+	test ax,ax
+	jz .exit
+	xor bp,bp
+	stc
+.exit	retf
 _ext2_load_block_of_file:	; block pointer in eax
 				; filesize: cx (sectors) + bx (bytes)
 				; es:di -> destination
 				; returns size left to load in cx,bx
 				; returns ax == 1 if done reading file
 				; returns ax == 0 otherwise
+				; es:di points to end of buffer on return
 				; Carry Flag (CF) set on error
 	cmp BYTE [cs:ext2.initialized],0
 	jne .start
 	stc
 	ret
-.start	;
+.start	push ds
+	push si
+	push edx
+	push ebp
 	test cx,cx
 	jnz .siz_ok
 	test bx,bx
@@ -1113,9 +1576,7 @@ _ext2_load_block_of_file:	; block pointer in eax
 	clc
 	mov ax,1
 	jmp .exit
-.siz_ok	push edx
-	push ebp
-	push DWORD [cs:ext2.sect_per_block]
+.siz_ok	push DWORD [cs:ext2.sect_per_block]
 	push WORD [cs:ext2.block_bytes_rem]
 	push ecx
 	push ebx
@@ -1181,56 +1642,17 @@ _ext2_load_block_of_file:	; block pointer in eax
 	pop di
 	pop es
 	pop cx
-	push WORD 0
-	push es
-	shl DWORD [ss:sp],4
-	add [ss:sp],di
-	adc WORD [ss:sp+2],0
-	add [ss:sp],cx
-	adc WORD [ss:sp+2],0
-	cmp DWORD [ss:sp],0x10FFEF	; maximum amount of addressable memory
-	jbe .noc
-	add sp,4
-	pop ebx
-	pop ecx
-	add sp,6
-	stc
-	jmp .exit
-.noc	mov di,[ss:sp]
-	mov WORD [ss:sp],0
-	shr DWORD [ss:sp],4
-	cmp DWORD [ss:sp],0xFFFF
-	jbe .sm
-	dec DWORD [ss:sp]
-	add di,0x10
-	jc .bad
-	cmp DWORD [ss:sp],0xFFFF
-	ja .bad
-	jmp .sm
-.bad	add sp,4
-	pop ebx
-	pop ecx
-	add sp,6
-	stc
-	jmp .exit	; this shouldn't happen
-.sm	pop es
-	add sp,2
-	add eax,1
-	adc edx,0
-	sub [ss:sp+8],cx
-	jg .noborr
-	dec DWORD [ss:sp+10]
-	jns .borr
-	clc
-	xor ax,ax
+	movzx ecx,cx
+	call add_to_seg_off
+	jnc .add_ok
 	pop ebx
 	pop ecx
 	add sp,6
 	jmp .exit
-.borr	add [ss:sp+8],[cs:bytes_per_sect]
-.noborr	pop ebx
-	sub bx,cx
+.add_ok	mov bp,cx
+	pop ebx
 	pop ecx
+	sub bx,bp
 	jg .more
 	dec cx
 	jns .bor
@@ -1239,7 +1661,20 @@ _ext2_load_block_of_file:	; block pointer in eax
 	add sp,6
 	jmp .exit
 .bor	add bx,[cs:bytes_per_sect]
-.more	push ecx
+.more	add eax,1
+	adc edx,0
+	sub [ss:sp+8],bp
+	jg .noborr
+	dec DWORD [ss:sp+10]
+	jns .borr
+	clc
+	pop eax
+	pop eax
+	xor ax,ax
+	add sp,6
+	jmp .exit
+.borr	add [ss:sp+8],[cs:bytes_per_sect]
+.noborr	push ecx
 	push ebx
 	push es
 	push di
@@ -1268,63 +1703,38 @@ _ext2_load_block_of_file:	; block pointer in eax
 	push edx
 	mov ax,[cs:bytes_per_sect]
 	mul cx
-	shl edx,16
-	mov dx,ax
-	xor eax,eax
-	mov ax,es
-	shl eax,4
-	movzx ebp,di
-	add eax,ebp
-	add edx,eax	; edx = bytes read, eax = current address
-	cmp edx,0x10FFEF	; maximum amount of memory addressable in real mode
-	jbe .ok
+	mov cx,dx
+	shl ecx,16
+	mov cx,ax
+	call add_to_seg_off
 	pop edx
 	pop eax
+	jnc .ok2
 	pop ebx
 	pop ecx
 	add sp,6
-	stc
 	jmp .exit
-.ok	mov di,dx
-	xor dx,dx
-	shr edx,4
-	cmp edx,0xFFFF
-	jbe .small
-	dec edx
-	add di,0x10
-	jc .bad2
-	cmp edx,0xFFFF
-	ja .bad2
-	jmp .small
-.bad2	pop edx
-	pop eax
-	pop ebx
-	pop ecx
-	add sp,6
-	stc
-	jmp .exit	; this shouldn't happen
-.small	mov es,dx
-	pop edx
-	pop eax
-	add eax,cx
+.ok2	add eax,cx
 	adc edx,0
 	movzx ebp,cx
 	pop ebx
 	pop ecx
-	sub [ss:sp+2],ebp
-	jnz .cont
-	cmp WORD [ss:sp],0
-	jne .cont
-	xor ax,ax
-	cmp cx,bp
-	jne .not_dn
+	sub cx,bp
+	jnz .ck_bk
 	test bx,bx
-	jnz .not_dn
+	jnz .ck_bk
 	mov ax,1
-.not_dn	add sp,6
+	add sp,6
 	clc
 	jmp .exit
-.cont	sub cx,bp
+.ck_bk	sub [ss:sp+2],ebp
+	jnz .rem
+	cmp WORD [ss:sp],0
+	jne .rem
+	xor ax,ax
+	add sp,6
+	clc
+	jmp .exit
 .rem	push ebx
 	push ecx
 	movzx ecx,cx
@@ -1375,34 +1785,11 @@ _ext2_load_block_of_file:	; block pointer in eax
 	pop di
 	pop es
 	pop cx
-	push WORD 0
-	push es
-	shl DWORD [ss:sp],4
-	add [ss:sp],di
-	adc WORD [ss:sp+2],0
-	add [ss:sp],bp
-	adc WORD [ss:sp+2],0
-	cmp DWORD [ss:sp],0x10FFEF	; maximum amount of addressable memory
-	jbe .noc2
-	add sp,4
-	stc
-	jmp .exit
-.noc2	mov di,[ss:sp]
-	mov WORD [ss:sp],0
-	shr DWORD [ss:sp],4
-	cmp DWORD [ss:sp],0xFFFF
-	jbe .sm2
-	dec DWORD [ss:sp]
-	add di,0x10
-	jc .bad2
-	cmp DWORD [ss:sp],0xFFFF
-	ja .bad2
-	jmp .sm2
-.bad2	add sp,4
-	stc
-	jmp .exit	; this shouldn't happen
-.sm2	pop es
-	add sp,2
+	push ecx
+	movzx ecx,cx
+	call add_to_seg_off
+	pop ecx
+	jc .exit
 	sub bx,bp
 	jns .nos
 	add bx,[cs:bytes_per_sect]
@@ -1430,9 +1817,10 @@ _ext2_load_block_of_file:	; block pointer in eax
 	jnz .exit
 	xor ax,ax
 	clc
-.exit	;
-	pop ebp
+.exit	pop ebp
 	pop edx
+	pop si
+	pop ds
 	ret
 
 ext2_load_file:
@@ -1445,22 +1833,50 @@ ext2_load_file_absolute:	; ds:si -> path
 	mov bp,1
 	stc
 	ret
-.start:	;
-.exit:	;
+.start:	push edx
+	push ecx
+	push ebx
+	push eax
+	call _ext2_find_path_absolute
+	jc .exit
+	call _ext2_get_inode_size
+	mov ebx,edx
+	mov ecx,eax
+	pop eax
+	push eax
+	jc .exit
+	call _ext2_load_inode
+.exit:	pop eax
+	pop ebx
+	pop ecx
+	pop edx
 	ret
 
 ext2_load_file_relative:	; ds:si -> path
 				; cx is the length of the path
-				; es:di -> any necessary info about parent directory
-				; fs:dx -> buffer big enough to hold file
+				; eax is the inode of the directory to look in (2 to look in the root dir) (only needed if the path is relative)
+				; es:di -> buffer big enough to hold file
 				; Carry Flag (CF) set on error
 	cmp BYTE [cs:ext2.initialized],0
 	jne .start
 	mov bp,1
 	stc
 	ret
-.start:	;
-.exit:	;
+.start:	push edx
+	push ecx
+	push ebx
+	call _ext2_find_path_relative
+	jc .exit
+	push eax
+	call _ext2_get_inode_size
+	mov ebx,edx
+	mov ecx,eax
+	pop eax
+	jc .exit
+	call _ext2_load_inode
+.exit:	pop ebx
+	pop ecx
+	pop edx
 	ret
 
 _ext2_get_inode_size:		; eax is the inode of the file to get the size of
