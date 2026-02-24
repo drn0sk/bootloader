@@ -820,17 +820,16 @@ _fat16_load_one_cluster_of_file:
 	push edx
 	mov ax,[cs:bytes_per_sect]
 	mul bp
-	push dx
-	push ax
-	mov ax,es
-	shr ax,12
-	pop dx
-	add di,dx
-	pop dx
-	adc ax,dx
-	shl ax,12
-	mov es,ax
-	mov [ds:si+_fat16_load_params.buff_seg],es
+	mov cx,dx
+	shl ecx,16
+	mov cx,ax
+	call add_to_seg_off
+	jnc .nc
+	pop edx
+	pop eax
+	mov ax,1
+	jmp .exit
+.nc	mov [ds:si+_fat16_load_params.buff_seg],es
 	mov [ds:si+_fat16_load_params.buff_off],di
 	mov WORD [ds:si+_fat16_load_params.buff_len_sect],0
 	pop edx
@@ -853,25 +852,33 @@ _fat16_load_one_cluster_of_file:
 	pop ds
 	mov si,[cs:_buff.off]
 	cld
+	push es
+	push di
+	push cx
 	rep movsb
+	pop cx
+	pop di
+	pop es
 	pop si
 	pop ds
+	push ds
+	push si
+	movzx ecx,cx
+	call add_to_seg_off
+	mov ax,1
+	jc .exit
 	mov [ds:si+_fat16_load_params.buff_seg],es
 	mov [ds:si+_fat16_load_params.buff_off],di
 	mov WORD [ds:si+_fat16_load_params.buff_len_rem],0
-	push ds
-	push si
 	clc
 	jmp .exit
 .rd_cl	call read
 	mov ax,1
 	jc .exit
-	mov ax,es
-	shr ax,12
-	add di,[cs:fat16.bytes_per_clust]
-	adc ax,[cs:fat16.bytes_per_clust+2]
-	shl ax,12
-	mov es,ax
+	mov ecx,[cs:fat16.bytes_per_clust]
+	call add_to_seg_off
+	mov ax,1
+	jc .exit
 	pop si
 	pop ds
 	push ds

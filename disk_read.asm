@@ -94,5 +94,45 @@ load_partition_table:	; drive in bl
 	call read
 	ret
 
+; helper function to add to a segment:offset
+add_to_seg_off:		; segment:offset in es:di
+			; number of bytes to add in ecx
+			; returns new segment:offset in es:di on success
+			; CF set on error (i.e. overflow)
+	push edx
+	push eax
+	xor eax,eax
+	mov ax,es
+	shl eax,4
+	movzx edx,di
+	add eax,edx
+	add eax,ecx
+	jc .exit
+	cmp eax,0x10FFEF	; max memory that's addressable in real mode
+	jbe .adr_ok
+	stc
+	jmp .exit
+.adr_ok	push di
+	mov di,ax
+	xor ax,ax
+	shr eax,4
+	cmp eax,0xFFFF
+	jbe .seg_ok
+	dec eax
+	add di,0x10
+	jc .bad
+	cmp eax,0xFFFF
+	ja .bad
+	jmp .seg_ok
+.bad	stc
+	pop di
+	jmp .exit		; this shouldn't happen
+.seg_ok	mov es,ax
+	pop ax
+	clc
+.exit	pop eax
+	pop edx
+	ret
+
 ; DISK_READ
 %endif
