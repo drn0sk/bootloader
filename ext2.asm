@@ -751,7 +751,7 @@ _ext2_foreach_block:	;  indirect block pointer in eax
 	sub bp,[cs:bytes_per_sect]
 	add eax,1
 	adc edx,0
-	jmp .err
+	jc .err
 .noc	sub ecx,1
 	sbb ebx,0
 	call .is_zero
@@ -796,7 +796,7 @@ _ext2_find_inode_in_block_wrapper:
 	jc .nof
 	xor bp,bp
 	stc
-	ret	; CF set and bp=0 -> file found
+	retf	; CF set and bp=0 -> file found
 .nof	test bp,bp
 	jnz .err
 	clc
