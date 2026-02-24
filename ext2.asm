@@ -248,6 +248,7 @@ ext2_init:
 
 %include "paths.asm"
 
+_ext2_find_path:
 _ext2_find_path_absolute:
 	cmp BYTE [cs:ext2.initialized],0
 	jne .start
@@ -273,7 +274,6 @@ _ext2_find_path_absolute:
 	dec cx
 	mov eax,2
 	jmp _ext2_find_path_relative.loop
-_ext2_find_path:
 _ext2_find_path_relative:	; ds:si -> path
 				; cx is the length of the path
 				; eax is the inode of the directory to look in (2 to look in the root dir) (only needed if the path is relative)
