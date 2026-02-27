@@ -21,11 +21,16 @@ print:			; es:bp -> string
 	ret
 
 print_newline:
-	mov bp,.newline
-	mov cx,.newline_len
-	jmp print
-.newline	db	0xa,0xd
-.newline_len	equ	$-.newline
+	push bp
+	push ecx
+	push `\r\n`
+	mov bp,sp
+	mov ecx,2
+	call print
+	add sp,2
+	pop ecx
+	pop bp
+	ret
 
 ; PRINT
 %endif
