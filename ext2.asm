@@ -1370,7 +1370,7 @@ _ext2_load_inode:	; inode of file to load in eax
 	mov eax,ebp
 	push cs
 	pop ds
-	mov si,_ext2_find_inode_in_block_wrapper
+	mov si,_ext2_load_block_of_file_wrapper
 	push ss
 	pop es
 	; eax = block pointer
@@ -1406,7 +1406,7 @@ _ext2_load_inode:	; inode of file to load in eax
 	jmp .exit
 .ld_ok	push sp
 	push ss
-	push _ext2_find_inode_in_block_wrapper
+	push _ext2_load_block_of_file_wrapper
 	push cs
 	mov di,sp
 	push ss
@@ -1451,7 +1451,7 @@ _ext2_load_inode:	; inode of file to load in eax
 	jmp .exit
 .ld_ok1	push sp
 	push ss
-	push _ext2_find_inode_in_block_wrapper
+	push _ext2_load_block_of_file_wrapper
 	push cs
 	mov di,sp
 	push ss
