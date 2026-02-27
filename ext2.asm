@@ -448,11 +448,12 @@ _ext2_find_inode:	; ds:si -> name
 	xor eax,eax
 	shrd eax,ebp,cl
 	shr ebp,cl
-	test eax,eax
-	jnz .noceil
-	inc ebp
-.noceil	pop eax
 	xor ebx,ebx
+	test eax,eax
+	jz .noceil
+	add ebp,1
+	adc ebx,0
+.noceil	pop eax
 	mov ecx,ebp
 	xchg di,si	; inode entry = edx:eax (sectors) + di (bytes)
 	add di,36
@@ -477,12 +478,12 @@ _ext2_find_inode:	; ds:si -> name
 	shl edi,16
 	pop di
 	call _ext2_find_inode_in_block
-	jc .nof
+	jc .nof0
 	pop ebp
 	pop bp
 	clc
 	jmp .exit	; file found
-.nof	test bp,bp
+.nof0	test bp,bp
 	pop eax
 	pop bp
 	mov bp,1
@@ -501,12 +502,18 @@ _ext2_find_inode:	; ds:si -> name
 	pop di
 	sub ecx,1
 	sbb ebx,0
-	js .lp_dn
-	test ecx,ecx
-	jnz .nz
+	jns .ns
+	stc
+	xor bp,bp
+	jmp .exit
+.ns	test ecx,ecx
+	jnz .nz0
 	test ebx,ebx
-	jz .lp_dn
-.nz	dec bp
+	jnz .nz0
+	stc
+	xor bp,bp
+	jmp .exit
+.nz0	dec bp
 	jnz .loop
 	; edx:eax (s) + di (b) -> singly indirect pointer
 .lp_dn	push di
@@ -543,32 +550,39 @@ _ext2_find_inode:	; ds:si -> name
 	pop si
 	pop eax
 	pop edx
-	jc .err
+	jc .err0
 	test bp,bp
-	jz .nof2
+	jz .nof1
 	pop eax
 	pop ds
 	pop si
 	pop cx
 	clc
 	jmp .exit	; file found
-.err	pop ebp
+.err0	pop ebp
 	pop ds
 	pop si
 	pop cx
 	mov bp,1
 	jmp .exit
-.nof2	add si,4
+.nof1	test ecx,ecx
+	jnz .nz1
+	test ebx,ebx
+	jnz .nz1
+	stc
+	xor bp,bp
+	jmp .exit
+.nz1	add si,4
 	jnc .nc5
 	sub si,[cs:bytes_per_sect]
 	add eax,1
 	adc edx,0
 .nc5	call _load_dword_from_LBA
-	jnc .ld_ok
+	jnc .ld_ok0
 	add sp,10
 	mov bp,1
 	jmp .exit
-.ld_ok	push sp
+.ld_ok0	push sp
 	push ss
 	push _ext2_find_inode_in_block_wrapper
 	push cs
@@ -586,9 +600,9 @@ _ext2_find_inode:	; ds:si -> name
 	pop si
 	pop eax
 	pop edx
-	jc .err2
+	jc .err1
 	test bp,bp
-	jz .nof3
+	jz .nof2
 	add sp,8
 	pop eax
 	pop ds
@@ -596,14 +610,21 @@ _ext2_find_inode:	; ds:si -> name
 	pop cx
 	clc
 	jmp .exit	; file found
-.err2	add sp,8
+.err1	add sp,8
 	pop ebp
 	pop ds
 	pop si
 	pop cx
 	mov bp,1
 	jmp .exit
-.nof3	add si,4
+.nof2	test ecx,ecx
+	jnz .nz2
+	test ebx,ebx
+	jnz .nz2
+	stc
+	xor bp,bp
+	jmp .exit
+.nz2	add si,4
 	jnc .nc6
 	sub si,[cs:bytes_per_sect]
 	add eax,1
@@ -701,9 +722,8 @@ _ext2_foreach_block:	;  indirect block pointer in eax
 	push edx
 	push ebx
 	push ecx
-	xor bp,bp
-	clc
 	call .is_zero
+	stc
 	jz .exit
 	push eax
 	push ecx
@@ -1176,11 +1196,11 @@ _ext2_load_inode:	; inode of file to load in eax
 	add eax,ebx
 	adc edx,0
 	add si,cx
-	jnc .nc1
+	jnc .nc0
 	sub si,[cs:bytes_per_sect]
 	add eax,1
 	adc edx,0
-.nc1	call _load_dword_from_LBA
+.nc0	call _load_dword_from_LBA
 	jnc .rd_bgt
 	pop edx
 	pop ecx
@@ -1209,20 +1229,20 @@ _ext2_load_inode:	; inode of file to load in eax
 	movzx ebp,WORD [cs:bytes_per_sect]
 	div ebp
 	add si,dx
-	jnc .nc2
+	jnc .nc1
 	sub si,[cs:bytes_per_sect]
 	add ecx,1
 	adc ebx,0
-.nc2	add ecx,eax
+.nc1	add ecx,eax
 	adc ebx,0
 	mov eax,ecx
 	mov edx,ebx
 	add si,4
-	jnc .nc3
+	jnc .nc2
 	sub si,[cs:bytes_per_sect]
 	add eax,1
 	adc edx,0	; inode entry = edx:eax (sectors) + si (bytes)
-.nc3	call _load_dword_from_LBA
+.nc2	call _load_dword_from_LBA
 	jnc .got_sz
 	pop ecx
 	pop ebx
@@ -1233,11 +1253,11 @@ _ext2_load_inode:	; inode of file to load in eax
 	mov ecx,ebp
 .fs64	mov ecx,ebp
 	sub si,4
-	jnc .nc4
+	jnc .nc3
 	add si,[cs:bytes_per_sect]
 	sub eax,1
 	sbb edx,0
-.nc4	call _load_word_from_LBA
+.nc3	call _load_word_from_LBA
 	jnc .got_tp
 	pop ecx
 	pop ebx
@@ -1246,11 +1266,11 @@ _ext2_load_inode:	; inode of file to load in eax
 	jz .file
 	xor ebx,ebx
 .file	add si,108
-	jnc .nc5
+	jnc .nc4
 	sub si,[cs:bytes_per_sect]
 	add eax,1
 	adc edx,0
-.nc5	call _load_dword_from_LBA
+.nc4	call _load_dword_from_LBA
 	jnc .sz64
 	pop ecx
 	pop ebx
@@ -1264,11 +1284,11 @@ _ext2_load_inode:	; inode of file to load in eax
 	mov ecx,[ss:esp]
 .load	add sp,8
 	sub si,68	; inode entry = edx:eax (sectors) + si (bytes)
-	jnc .nc6
+	jnc .nc5
 	add si,[cs:bytes_per_sect]
 	sub eax,1
 	sbb edx,0
-.nc6	mov bp,12
+.nc5	mov bp,12
 .loop	push eax
 	push edx
 	mov eax,ecx
@@ -1301,11 +1321,11 @@ _ext2_load_inode:	; inode of file to load in eax
 	jnz .exit	; file loaded
 	; did not finish loading file
 	add si,4
-	jnc .nc7
+	jnc .nc6
 	sub si,[cs:bytes_per_sect]
 	add eax,1
 	adc edx,0
-.nc7	push eax
+.nc6	push eax
 	push dx
 	xor dx,dx
 	mov ax,cx
@@ -1320,10 +1340,11 @@ _ext2_load_inode:	; inode of file to load in eax
 	pop dx
 	pop eax
 	test ecx,ecx
-	jnz .nz
+	jnz .nz0
 	test ebx,ebx
-	jz .lp_dn
-.nz	dec bp
+	clc
+	jz .exit
+.nz0	dec bp
 	jnz .loop
 	; edx:eax (s) + di (b) -> singly indirect pointer
 .lp_dn	push di
@@ -1383,9 +1404,9 @@ _ext2_load_inode:	; inode of file to load in eax
 	pop si
 	pop eax
 	pop edx
-	jc .err
-	test bp,bp
-	jz .nof
+	jc .err0
+	cmp WORD [ss:esp],0
+	je .more0
 	pop ax
 	pop cx
 	pop bx
@@ -1393,18 +1414,25 @@ _ext2_load_inode:	; inode of file to load in eax
 	pop di
 	clc
 	jmp .exit	; file loaded
-.err	pop ax
+.err0	pop ax
 	pop cx
 	pop bx
 	pop es
 	pop di
 	jmp .exit
-.nof	add si,4
-	jnc .nc8
+.more0	test ecx,ecx
+	jnz .nz1
+	test ebx,ebx
+	jnz .nz1
+	add sp,10
+	clc
+	jmp .exit
+.nz1	add si,4
+	jnc .nc7
 	sub si,[cs:bytes_per_sect]
 	add eax,1
 	adc edx,0
-.nc8	call _load_dword_from_LBA
+.nc7	call _load_dword_from_LBA
 	jnc .ld_ok
 	add sp,10
 	jmp .exit
@@ -1426,9 +1454,9 @@ _ext2_load_inode:	; inode of file to load in eax
 	pop si
 	pop eax
 	pop edx
-	jc .err2
-	test bp,bp
-	jz .nof2
+	jc .err1
+	cmp WORD [ss:esp+8],0
+	je .more1
 	add sp,8
 	pop ax
 	pop cx
@@ -1437,19 +1465,26 @@ _ext2_load_inode:	; inode of file to load in eax
 	pop di
 	clc
 	jmp .exit	; file loaded
-.err2	add sp,8
+.err1	add sp,8
 	pop ax
 	pop cx
 	pop bx
 	pop es
 	pop di
 	jmp .exit
-.nof2	add si,4
-	jnc .nc9
+.more1	test ecx,ecx
+	jnz .nz2
+	test ebx,ebx
+	jnz .nz2
+	add sp,18
+	clc
+	jmp .exit
+.nz2	add si,4
+	jnc .nc8
 	sub si,[cs:bytes_per_sect]
 	add eax,1
 	adc edx,0
-.nc9	call _load_dword_from_LBA
+.nc8	call _load_dword_from_LBA
 	jnc .ld_ok1
 	add sp,18
 	jmp .exit
@@ -1475,10 +1510,9 @@ _ext2_load_inode:	; inode of file to load in eax
 	pop di
 	push edx
 	popf
-	mov dx,bp
 	jc .exit
 	stc
-	test dx,dx
+	test ax,ax
 	jz .exit
 	clc
 .exit	pop ebp
@@ -1959,11 +1993,11 @@ _ext2_get_inode_size:		; eax is the inode of the file to get the size of
 	movzx ebp,WORD [cs:bytes_per_sect]
 	div ebp
 	add si,dx
-	jnc .nc
+	jnc .nc0
 	sub si,[cs:bytes_per_sect]
 	add ecx,1
 	adc ebx,0
-.nc	add ecx,eax
+.nc0	add ecx,eax
 	adc ebx,0
 	mov eax,ecx
 	mov edx,ebx
