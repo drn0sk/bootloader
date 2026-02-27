@@ -54,7 +54,7 @@ _start	mov bx,cs
 
 exit_error:
 	mov bp,error_msg
-	mov cx,error_msg_len
+	mov ecx,error_msg_len
 	call print
 exit:	int 0x18
 	jmp 0xFFFF:0
