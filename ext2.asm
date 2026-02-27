@@ -1257,7 +1257,7 @@ _ext2_load_inode:	; inode of file to load in eax
 	sub eax,1
 	sbb edx,0
 .nc6	mov bp,12
-	push eax
+.loop	push eax
 	push edx
 	mov eax,ecx
 	mov edx,ebx
@@ -1268,10 +1268,10 @@ _ext2_load_inode:	; inode of file to load in eax
 	pop edx
 	pop eax
 	cmp ecx,0xFFFF
-	jbe .loop
+	jbe .sectok
 	stc
 	jmp .exit
-.loop	push bp
+.sectok	push bp
 	call _load_dword_from_LBA
 	jnc .cont
 	pop bp
@@ -1300,6 +1300,7 @@ _ext2_load_inode:	; inode of file to load in eax
 	mul WORD [cs:bytes_per_sect]
 	mov cx,dx
 	shl ecx,16
+	mov cx,ax
 	movzx eax,bx
 	xor ebx,ebx
 	add ecx,eax
