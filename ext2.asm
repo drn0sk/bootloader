@@ -1757,9 +1757,11 @@ _ext2_load_block_of_file:	; block pointer in eax
 	jc .exit
 	push es
 	push di
+	push cx
 	mov cx,bp
 	cld
 	rep movsb
+	pop cx
 	pop di
 	pop es
 	push ecx
