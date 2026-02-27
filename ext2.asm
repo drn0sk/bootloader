@@ -1805,12 +1805,12 @@ ext2_load_file_absolute:	; ds:si -> path
 	push eax
 	call _ext2_find_path_absolute
 	jc .exit
+	push eax
 	call _ext2_get_inode_size
 	mov bp,1
 	mov ebx,edx
 	mov ecx,eax
 	pop eax
-	push eax
 	jc .exit
 	call _ext2_load_inode
 	mov bp,1
@@ -1838,12 +1838,12 @@ ext2_load_file_relative:	; ds:si -> path
 	push eax
 	call _ext2_find_path_relative
 	jc .exit
+	push eax
 	call _ext2_get_inode_size
 	mov bp,1
 	mov ebx,edx
 	mov ecx,eax
 	pop eax
-	push eax
 	jc .exit
 	call _ext2_load_inode
 	mov bp,1
