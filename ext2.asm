@@ -1677,12 +1677,14 @@ _ext2_load_block_of_file:	; block pointer in eax
 	jmp .exit
 .rd_ok2	push eax
 	push edx
+	push cx
 	mov ax,[cs:bytes_per_sect]
 	mul cx
 	mov cx,dx
 	shl ecx,16
 	mov cx,ax
 	call add_to_seg_off
+	pop cx
 	pop edx
 	pop eax
 	jnc .ok2
@@ -1753,7 +1755,6 @@ _ext2_load_block_of_file:	; block pointer in eax
 	pop dx
 	pop eax
 	jc .exit
-	push cx
 	push es
 	push di
 	mov cx,bp
@@ -1761,9 +1762,8 @@ _ext2_load_block_of_file:	; block pointer in eax
 	rep movsb
 	pop di
 	pop es
-	pop cx
 	push ecx
-	movzx ecx,cx
+	movzx ecx,bp
 	call add_to_seg_off
 	pop ecx
 	jc .exit
