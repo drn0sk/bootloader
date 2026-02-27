@@ -17,7 +17,7 @@ $(BUILD_DIR)/stage2 : stage2.asm disk_read.asm fs.asm fat16.asm ext2.asm paths.a
 	nasm -f bin $(if $(STAGE2_LISTING),-l '$(DEBUG_DIR)/$(STAGE2_LISTING)') -o $(BUILD_DIR)/stage2 -d'BOOTLOADER=$(BOOTLOADER_PATH)' stage2.asm
 
 CONFIG_PATH = /boot.conf
-$(BUILD_DIR)/loader : bootloader.asm disk_read.asm fs.asm fat16.asm paths.asm print.asm string.asm
+$(BUILD_DIR)/loader : bootloader.asm disk_read.asm fs.asm fat16.asm ext2.asm paths.asm print.asm string.asm
 	mkdir -p $(BUILD_DIR)
 	nasm -f bin -o $(BUILD_DIR)/loader -d'CONFIG=$(CONFIG_PATH)' bootloader.asm
 
