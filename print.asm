@@ -14,7 +14,7 @@ print:			; es:bp -> string
 	int 0x10
 	inc bp
 	dec ecx
-	jz .loop
+	jnz .loop
 .exit	pop ecx
 	pop bx
 	pop ax
