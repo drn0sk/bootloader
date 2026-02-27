@@ -246,7 +246,12 @@ ext2_init:
 %include "paths.asm"
 
 _ext2_find_path:
-_ext2_find_path_absolute:
+_ext2_find_path_absolute:	; ds:si -> path
+				; cx is the length of the path
+				; returns inode in eax
+				; Carry Flag (CF) set on error
+				;  if bp is zero, the file was not found
+				;  if bp is nonzero, there was some other error
 	cmp BYTE [cs:ext2.initialized],0
 	jne .start
 	mov bp,1
@@ -273,7 +278,7 @@ _ext2_find_path_absolute:
 	jmp _ext2_find_path_relative.loop
 _ext2_find_path_relative:	; ds:si -> path
 				; cx is the length of the path
-				; eax is the inode of the directory to look in (2 to look in the root dir) (only needed if the path is relative)
+				; eax is the inode of the directory to look in (2 to look in the root dir)
 				; returns inode in eax
 				; Carry Flag (CF) set on error
 				;  if bp is zero, the file was not found
@@ -338,8 +343,11 @@ _ext2_find_inode:	; ds:si -> name
 	mov bp,1
 	stc
 	ret
-.start	push es
-	push di
+.start	push ds
+	push si
+	push ecx
+	push es
+	push edi
 	push edx
 	push ebx
 	mov di,cx
@@ -377,11 +385,11 @@ _ext2_find_inode:	; ds:si -> name
 	add eax,ebx
 	adc edx,0
 	add si,cx
-	jnc .noc
+	jnc .nc0
 	sub si,[cs:bytes_per_sect]
 	add eax,1
 	adc edx,0
-.noc	call _load_dword_from_LBA
+.nc0	call _load_dword_from_LBA
 	jnc .rd_bgt
 	pop edx
 	mov bp,1
@@ -409,11 +417,11 @@ _ext2_find_inode:	; ds:si -> name
 	movzx ebp,WORD [cs:bytes_per_sect]
 	div ebp
 	add si,dx
-	jnc .nc
+	jnc .nc1
 	sub si,[cs:bytes_per_sect]
 	add ecx,1
 	adc ebx,0
-.nc	add ecx,eax
+.nc1	add ecx,eax
 	adc ebx,0
 	mov eax,ecx
 	mov edx,ebx
@@ -421,16 +429,16 @@ _ext2_find_inode:	; ds:si -> name
 	jnc .type
 	mov bp,1
 	jmp .exit
-.type	xor bp,bp	; treated as not found
-	test bp,0x4000	; error if parent directory is not an actual directory
+.type	test bp,0x4000	; error if parent directory is not an actual directory
 	stc
+	mov bp,0	; treated as not found
 	jz .exit
 	add si,4
-	jnc .nc1
+	jnc .nc2
 	sub si,[cs:bytes_per_sect]
 	add eax,1
 	adc edx,0	; inode entry = edx:eax (sectors) + si (bytes)
-.nc1	call _load_dword_from_LBA
+.nc2	call _load_dword_from_LBA
 	jnc .got_sz
 	mov bp,1
 	jmp .exit
@@ -448,11 +456,11 @@ _ext2_find_inode:	; ds:si -> name
 	mov ecx,ebp
 	xchg di,si	; inode entry = edx:eax (sectors) + di (bytes)
 	add di,36
-	jnc .nc2
+	jnc .nc3
 	sub di,[cs:bytes_per_sect]
 	add eax,1
 	adc edx,0
-.nc2	mov bp,12
+.nc3	mov bp,12
 .loop	xchg si,di
 	push bp
 	call _load_dword_from_LBA
@@ -482,11 +490,11 @@ _ext2_find_inode:	; ds:si -> name
 	jnz .exit	; some other error
 	; file not found
 	add di,4
-	jnc .nc3
+	jnc .nc4
 	sub di,[cs:bytes_per_sect]
 	add eax,1
 	adc edx,0
-.nc3	push di
+.nc4	push di
 	shr edi,16
 	xchg cx,di
 	shl edi,16
@@ -495,10 +503,10 @@ _ext2_find_inode:	; ds:si -> name
 	sbb ebx,0
 	js .lp_dn
 	test ecx,ecx
-	jnz .noz
+	jnz .nz
 	test ebx,ebx
 	jz .lp_dn
-.noz	dec bp
+.nz	dec bp
 	jnz .loop
 	; edx:eax (s) + di (b) -> singly indirect pointer
 .lp_dn	push di
@@ -532,7 +540,7 @@ _ext2_find_inode:	; ds:si -> name
 	; eax = block pointer
 	; ebx:ecx = size in blocks
 	call _ext2_foreach_block	; singly indirect
-	pop di
+	pop si
 	pop eax
 	pop edx
 	jc .err
@@ -550,13 +558,12 @@ _ext2_find_inode:	; ds:si -> name
 	pop cx
 	mov bp,1
 	jmp .exit
-.nof2	add di,4
-	jnc .nc4
-	sub di,[cs:bytes_per_sect]
+.nof2	add si,4
+	jnc .nc5
+	sub si,[cs:bytes_per_sect]
 	add eax,1
 	adc edx,0
-.nc4	mov si,di
-	call _load_dword_from_LBA
+.nc5	call _load_dword_from_LBA
 	jnc .ld_ok
 	add sp,10
 	mov bp,1
@@ -576,7 +583,7 @@ _ext2_find_inode:	; ds:si -> name
 	pop ds
 	mov si,_ext2_foreach_block_wrapper
 	call _ext2_foreach_block	; doubly indirect
-	pop di
+	pop si
 	pop eax
 	pop edx
 	jc .err2
@@ -596,13 +603,12 @@ _ext2_find_inode:	; ds:si -> name
 	pop cx
 	mov bp,1
 	jmp .exit
-.nof3	add di,4
-	jnc .nc5
-	sub di,[cs:bytes_per_sect]
+.nof3	add si,4
+	jnc .nc6
+	sub si,[cs:bytes_per_sect]
 	add eax,1
 	adc edx,0
-.nc5	mov si,di
-	call _load_dword_from_LBA
+.nc6	call _load_dword_from_LBA
 	jnc .ld_ok1
 	add sp,18
 	mov bp,1
@@ -636,8 +642,11 @@ _ext2_find_inode:	; ds:si -> name
 	clc
 .exit	pop ebx
 	pop edx
-	pop di
+	pop edi
 	pop es
+	pop ecx
+	pop si
+	pop ds
 	ret
 
 _ext2_foreach_block_wrapper:
@@ -687,6 +696,8 @@ _ext2_foreach_block:	;  indirect block pointer in eax
 			;  CF clear on success
 			;    with bp nonzero if we exited early
 			;         bp zero if we reached the end of the loop
+	push esi
+	push eax
 	push edx
 	push eax
 	push ecx
@@ -766,6 +777,8 @@ _ext2_foreach_block:	;  indirect block pointer in eax
 	jmp .exit
 .err	stc
 .exit	pop edx
+	pop eax
+	pop esi
 	ret
 .is_zero:		; sets ZF if ebx:ecx is zero, clears ZF otherwise
 	test ecx,ecx
@@ -787,7 +800,7 @@ _ext2_find_inode_in_block_wrapper:
 			; CF unset -> file not found
 	push ds
 	push si
-	push ecx
+	push cx
 	push eax
 	mov ds,[es:di+4]
 	mov si,[es:di+6]
@@ -795,7 +808,7 @@ _ext2_find_inode_in_block_wrapper:
 	call _ext2_find_inode_in_block
 	mov [es:di],eax
 	pop eax
-	pop ecx
+	pop cx
 	pop si
 	pop ds
 	jc .nof
@@ -1106,10 +1119,12 @@ _ext2_load_inode:	; inode of file to load in eax
 			; Carry Flag (CF) set on error
 	cmp BYTE [cs:ext2.initialized],0
 	jne .start
-	mov bp,1
 	stc
 	ret
-.start	push ds
+.start	push eax
+	push es
+	push di
+	push ds
 	push si
 	push edx
 	push ebp
@@ -1147,16 +1162,13 @@ _ext2_load_inode:	; inode of file to load in eax
 	add eax,ebx
 	adc edx,0
 	add si,cx
-	jnc .nc
+	jnc .nc1
 	sub si,[cs:bytes_per_sect]
 	add eax,1
 	adc edx,0
-.nc	call _load_dword_from_LBA
+.nc1	call _load_dword_from_LBA
 	jnc .rd_bgt
 	pop edx
-	pop ecx
-	pop ebx
-	mov bp,1
 	jmp .exit
 .rd_bgt	push ebp
 	mov eax,ebp
@@ -1195,12 +1207,8 @@ _ext2_load_inode:	; inode of file to load in eax
 	add eax,1
 	adc edx,0	; inode entry = edx:eax (sectors) + si (bytes)
 .nc3	call _load_dword_from_LBA
-	jnc .got_sz
-	pop ecx
-	pop ebx
-	mov bp,1
-	jmp .exit
-.got_sz	cmp BYTE [cs:ext2.size64],0
+	jc .exit
+	cmp BYTE [cs:ext2.size64],0
 	jnz .fs64
 	xor ebx,ebx
 	mov ecx,ebp
@@ -1211,12 +1219,8 @@ _ext2_load_inode:	; inode of file to load in eax
 	sub eax,1
 	sbb edx,0
 .nc4	call _load_word_from_LBA
-	jnc .got_tp
-	pop ecx
-	pop ebx
-	mov bp,1
-	jmp .exit
-.got_tp	test bp,0x4000
+	jc .exit
+	test bp,0x4000
 	jz .file
 	xor ebx,ebx
 .file	add si,108
@@ -1225,12 +1229,8 @@ _ext2_load_inode:	; inode of file to load in eax
 	add eax,1
 	adc edx,0
 .nc5	call _load_dword_from_LBA
-	jnc .sz64
-	pop ecx
-	pop ebx
-	mov bp,1
-	jmp .exit
-.sz64	mov ebx,ebp
+	jc .exit
+	mov ebx,ebp
 	cmp ebx,[ss:esp+4]
 	jne .h
 	cmp ecx,[ss:esp]
@@ -1257,13 +1257,11 @@ _ext2_load_inode:	; inode of file to load in eax
 	cmp ecx,0xFFFF
 	jbe .loop
 	stc
-	mov bp,1
 	jmp .exit
 .loop	push bp
 	call _load_dword_from_LBA
 	jnc .cont
 	pop bp
-	mov bp,1
 	jmp .exit
 .cont	push eax
 	mov eax,ebp
@@ -1296,10 +1294,10 @@ _ext2_load_inode:	; inode of file to load in eax
 	pop dx
 	pop ax
 	test ecx,ecx
-	jnz .noz
+	jnz .nz
 	test ebx,ebx
 	jz .lp_dn
-.noz	dec bp
+.nz	dec bp
 	jnz .loop
 	; edx:eax (s) + di (b) -> singly indirect pointer
 .lp_dn	push di
@@ -1342,7 +1340,6 @@ _ext2_load_inode:	; inode of file to load in eax
 	call _load_dword_from_LBA
 	jnc .gotp
 	add sp,20
-	mov bp,1
 	jmp .exit
 .gotp	mov eax,ebp
 	push cs
@@ -1358,7 +1355,7 @@ _ext2_load_inode:	; inode of file to load in eax
 	pop edx
 	jc .err
 	test bp,bp
-	jz .nof2
+	jz .nof
 	pop ax
 	pop cx
 	pop bx
@@ -1371,9 +1368,8 @@ _ext2_load_inode:	; inode of file to load in eax
 	pop bx
 	pop es
 	pop di
-	mov bp,1
 	jmp .exit
-.nof2	add si,4
+.nof	add si,4
 	jnc .nc8
 	sub si,[cs:bytes_per_sect]
 	add eax,1
@@ -1381,7 +1377,6 @@ _ext2_load_inode:	; inode of file to load in eax
 .nc8	call _load_dword_from_LBA
 	jnc .ld_ok
 	add sp,10
-	mov bp,1
 	jmp .exit
 .ld_ok	push sp
 	push ss
@@ -1403,7 +1398,7 @@ _ext2_load_inode:	; inode of file to load in eax
 	pop edx
 	jc .err2
 	test bp,bp
-	jz .nof3
+	jz .nof2
 	add sp,8
 	pop ax
 	pop cx
@@ -1418,9 +1413,8 @@ _ext2_load_inode:	; inode of file to load in eax
 	pop bx
 	pop es
 	pop di
-	mov bp,1
 	jmp .exit
-.nof3	add si,4
+.nof2	add si,4
 	jnc .nc9
 	sub si,[cs:bytes_per_sect]
 	add eax,1
@@ -1428,7 +1422,6 @@ _ext2_load_inode:	; inode of file to load in eax
 .nc9	call _load_dword_from_LBA
 	jnc .ld_ok1
 	add sp,18
-	mov bp,1
 	jmp .exit
 .ld_ok1	push sp
 	push ss
@@ -1453,17 +1446,20 @@ _ext2_load_inode:	; inode of file to load in eax
 	push edx
 	popf
 	mov dx,bp
-	mov bp,1
 	jc .exit
-	xor bp,bp
 	stc
 	test dx,dx
 	jz .exit
 	clc
-.exit	pop ebp
+.exit	pop ecx
+	pop ebx
+	pop ebp
 	pop edx
 	pop si
 	pop ds
+	pop di
+	pop es
+	pop eax
 	ret
 
 _ext2_load_block_of_file_wrapper:
@@ -1796,6 +1792,8 @@ ext2_load_file_absolute:	; ds:si -> path
 				; cx is the length of the path
 				; es:di -> buffer big enough to hold file
 				; Carry Flag (CF) set on error
+				;  if bp is zero, the file was not found
+				;  if bp is nonzero, there was some other error
 	cmp BYTE [cs:ext2.initialized],0
 	jne .start
 	mov bp,1
@@ -1808,12 +1806,14 @@ ext2_load_file_absolute:	; ds:si -> path
 	call _ext2_find_path_absolute
 	jc .exit
 	call _ext2_get_inode_size
+	mov bp,1
 	mov ebx,edx
 	mov ecx,eax
 	pop eax
 	push eax
 	jc .exit
 	call _ext2_load_inode
+	mov bp,1
 .exit:	pop eax
 	pop ebx
 	pop ecx
@@ -1825,6 +1825,8 @@ ext2_load_file_relative:	; ds:si -> path
 				; eax is the inode of the directory to look in (2 to look in the root dir) (only needed if the path is relative)
 				; es:di -> buffer big enough to hold file
 				; Carry Flag (CF) set on error
+				;  if bp is zero, the file was not found
+				;  if bp is nonzero, there was some other error
 	cmp BYTE [cs:ext2.initialized],0
 	jne .start
 	mov bp,1
@@ -1833,16 +1835,20 @@ ext2_load_file_relative:	; ds:si -> path
 .start:	push edx
 	push ecx
 	push ebx
+	push eax
 	call _ext2_find_path_relative
 	jc .exit
-	push eax
 	call _ext2_get_inode_size
+	mov bp,1
 	mov ebx,edx
 	mov ecx,eax
 	pop eax
+	push eax
 	jc .exit
 	call _ext2_load_inode
-.exit:	pop ebx
+	mov bp,1
+.exit:	pop eax
+	pop ebx
 	pop ecx
 	pop edx
 	ret
