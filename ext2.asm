@@ -754,9 +754,9 @@ _ext2_foreach_block:	;  indirect block pointer in eax
 	jmp .cont ; skip any block pointers that are zero
 .b_ok	mov [cs:.fn_ptr],si
 	mov [cs:.fn_ptr+2],ds
-	call far [cs:.fn_ptr]
 	shl esi,16
 	pop si
+	call far [cs:.fn_ptr]
 	pop eax
 	jnc .cont
 	test bp,bp
