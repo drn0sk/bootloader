@@ -1293,7 +1293,7 @@ _ext2_load_inode:	; inode of file to load in eax
 	sub si,[cs:bytes_per_sect]
 	add eax,1
 	adc edx,0
-.nc7	push ax
+.nc7	push eax
 	push dx
 	xor dx,dx
 	mov ax,cx
@@ -1306,7 +1306,7 @@ _ext2_load_inode:	; inode of file to load in eax
 	add ecx,eax
 	adc ebx,0
 	pop dx
-	pop ax
+	pop eax
 	test ecx,ecx
 	jnz .nz
 	test ebx,ebx
@@ -1346,16 +1346,20 @@ _ext2_load_inode:	; inode of file to load in eax
 	shrd ebp,ebx,cl
 	shr ebx,cl
 	test eax,eax
-	jnz .noceil
+	jz .noceil
 	add ebp,1
 	adc ebx,0
 .noceil	mov ecx,ebp
-	push si
+	pop eax
+	pop edx
 	call _load_dword_from_LBA
 	jnc .gotp
-	add sp,20
+	add sp,10
 	jmp .exit
-.gotp	mov eax,ebp
+.gotp	push edx
+	push eax
+	push si
+	mov eax,ebp
 	push cs
 	pop ds
 	mov si,_ext2_find_inode_in_block_wrapper
@@ -1377,7 +1381,7 @@ _ext2_load_inode:	; inode of file to load in eax
 	pop di
 	clc
 	jmp .exit	; file loaded
-.err	pop bp
+.err	pop ax
 	pop cx
 	pop bx
 	pop es
@@ -1422,7 +1426,7 @@ _ext2_load_inode:	; inode of file to load in eax
 	clc
 	jmp .exit	; file loaded
 .err2	add sp,8
-	pop bp
+	pop ax
 	pop cx
 	pop bx
 	pop es
