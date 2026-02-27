@@ -803,7 +803,7 @@ _ext2_find_inode_in_block_wrapper:
 			;          ds (name segment),
 			;          si (name offset),
 			;          cx (name len)
-			; CF set and bp == 0 -> file found (inode in eax)
+			; CF set and bp == 0 -> file found
 			; CF set and bp != 0 -> some error
 			; CF unset -> file not found
 	push ds
@@ -1527,18 +1527,18 @@ _ext2_load_block_of_file_wrapper:
 	push ds
 	pop es
 	mov di,si
-	pop ecx
-	pop ebx
-	pop eax
-	pop si
-	pop ds
 	mov bp,1
 	jc .exit
 	test ax,ax
 	jz .exit
 	xor bp,bp
 	stc
-.exit	retf
+.exit	pop ecx
+	pop ebx
+	pop eax
+	pop si
+	pop ds
+	retf
 _ext2_load_block_of_file:	; block pointer in eax
 				; filesize: cx (sectors) + bx (bytes)
 				; es:di -> destination
