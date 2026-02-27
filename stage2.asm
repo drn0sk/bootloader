@@ -95,11 +95,11 @@ load:
 	call get_file_size	; returns file size in eax
 	jnc .chk_sz
 	test bp,bp
-	jnz .err
+	jnz .exit_error
 	mov bp,file_not_found_msg
 	mov ecx,file_not_found_msg_len
 	call print
-.err	jmp exit_error
+	jmp exit_error
 .chk_sz	cmp eax,481*1024	; least amount of space at 0x7C00
 	jbe .sz_ok		; could be more if EBDA is smaller
 	mov bp,file_too_long_msg
