@@ -32,7 +32,7 @@ cs_zero:		; cs = 0
 	jmp 0x00:0x1500
 exit_error:
 	mov bp,error_msg
-	mov cx,error_msg_len
+	mov ecx,error_msg_len
 	call print
 	int 0x18
 .reboot	jmp 0xFFFF:0	; reboot
