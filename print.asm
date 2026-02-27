@@ -32,5 +32,49 @@ print_newline:
 	pop bp
 	ret
 
+print_num:		; number to print in edx:eax
+	push eax
+	push ebx
+	push ecx
+	push edx
+	push ebp
+	push es
+	xor cx,cx
+	push `\r\n`
+	add cx,2
+.loop	movzx bp,al
+	and bp,0x0F
+	mov bh,[cs:.dgs+bp]
+	movzx bp,al
+	shr bp,4
+	mov bl,[cs:.dgs+bp]
+	push bx
+	add cx,2
+	shrd eax,edx,8
+	shr edx,8
+	call .zero
+	jnz .loop
+	push "0x"
+	add cx,2
+	mov ax,ss
+	mov es,ax
+	mov bp,sp
+	movzx ecx,cx
+	call print
+	add sp,cx
+.exit	pop es
+	pop ebp
+	pop edx
+	pop ecx
+	pop ebx
+	pop eax
+	ret
+.dgs	db	"0123456789ABCDEF"
+.zero:			; checks if edx:eax is zero
+	test eax,eax
+	jnz .done
+	test edx,edx
+.done	ret
+
 ; PRINT
 %endif
