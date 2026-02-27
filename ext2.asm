@@ -701,6 +701,10 @@ _ext2_foreach_block:	;  indirect block pointer in eax
 	push edx
 	push ebx
 	push ecx
+	xor bp,bp
+	clc
+	call .is_zero
+	jz .exit
 	push eax
 	push ecx
 	mov cl,[cs:ext2.log_block_size]
