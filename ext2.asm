@@ -1334,7 +1334,7 @@ _ext2_load_inode:	; inode of file to load in eax
 	jmp .exit
 .qok	push di
 	push bp
-	sub esp,2
+	sub sp,2
 	mov di,sp
 	push edx
 	push eax
