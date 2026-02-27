@@ -53,7 +53,7 @@ find_part:
 
 exit_error:
 	mov bp,error_msg
-	mov cx,error_msg_len
+	mov ecx,error_msg_len
 	call print
 	int 0x18
 .reboot	jmp 0xFFFF:0	; reboot
@@ -92,13 +92,13 @@ load:
 	test bp,bp
 	jnz .err
 	mov bp,file_not_found_msg
-	mov cx,file_not_found_msg_len
+	mov ecx,file_not_found_msg_len
 	call print
 .err	jmp exit_error
 .chk_sz	cmp eax,481*1024	; least amount of space at 0x7C00
 	jbe .sz_ok		; could be more if EBDA is smaller
 	mov bp,file_too_long_msg
-	mov cx,file_too_long_msg_len
+	mov ecx,file_too_long_msg_len
 	call print
 	jmp exit_error
 .sz_ok	mov si,filepath
