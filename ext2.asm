@@ -1126,6 +1126,8 @@ _ext2_load_inode:	; inode of file to load in eax
 	push di
 	push ds
 	push si
+	push ebx
+	push ecx
 	push edx
 	push ebp
 	push ebx
@@ -1169,6 +1171,8 @@ _ext2_load_inode:	; inode of file to load in eax
 .nc1	call _load_dword_from_LBA
 	jnc .rd_bgt
 	pop edx
+	pop ecx
+	pop ebx
 	jmp .exit
 .rd_bgt	push ebp
 	mov eax,ebp
@@ -1207,8 +1211,11 @@ _ext2_load_inode:	; inode of file to load in eax
 	add eax,1
 	adc edx,0	; inode entry = edx:eax (sectors) + si (bytes)
 .nc3	call _load_dword_from_LBA
-	jc .exit
-	cmp BYTE [cs:ext2.size64],0
+	jnc .got_sz
+	pop ecx
+	pop ebx
+	jmp .exit
+.got_sz	cmp BYTE [cs:ext2.size64],0
 	jnz .fs64
 	xor ebx,ebx
 	mov ecx,ebp
@@ -1219,8 +1226,11 @@ _ext2_load_inode:	; inode of file to load in eax
 	sub eax,1
 	sbb edx,0
 .nc4	call _load_word_from_LBA
-	jc .exit
-	test bp,0x4000
+	jnc .got_tp
+	pop ecx
+	pop ebx
+	jmp .exit
+.got_tp	test bp,0x4000
 	jz .file
 	xor ebx,ebx
 .file	add si,108
@@ -1229,8 +1239,11 @@ _ext2_load_inode:	; inode of file to load in eax
 	add eax,1
 	adc edx,0
 .nc5	call _load_dword_from_LBA
-	jc .exit
-	mov ebx,ebp
+	jnc .sz64
+	pop ecx
+	pop ebx
+	jmp .exit
+.sz64	mov ebx,ebp
 	cmp ebx,[ss:esp+4]
 	jne .h
 	cmp ecx,[ss:esp]
@@ -1451,10 +1464,10 @@ _ext2_load_inode:	; inode of file to load in eax
 	test dx,dx
 	jz .exit
 	clc
-.exit	pop ecx
-	pop ebx
-	pop ebp
+.exit	pop ebp
 	pop edx
+	pop ecx
+	pop ebx
 	pop si
 	pop ds
 	pop di
