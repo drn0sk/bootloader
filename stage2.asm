@@ -43,7 +43,7 @@ find_part:
 	
 	; EXT2 ?
 	cmp BYTE [cs:0x7c00+di+4],0x83
-	je ext2
+	je e2
 	
 	;
 .continue:
@@ -73,8 +73,13 @@ f16:
 	push WORD FAT16
 	jmp load
 
-ext2:
-	jmp exit_error	; not yet implemented
+e2:
+	set_fs EXT2
+	jc exit_error
+	push WORD EXT2
+	jmp load
+
+; ... more filesystems?
 
 ; LBA of partition to load in eax
 load:
@@ -112,7 +117,7 @@ load:
 	add sp,[cs:bytes_per_sect]
 finally:	; drive number in dl
 		; starting LBA of partition in eax
-		; filesystem type in cx (FAT16 (1) for fat16, ...)
+		; filesystem type in cx (FAT16 (1) for fat16, EXT2 (2) for ext2, ...)
 	jmp 0x00:0x7C00
 
 %defstr BOOTLOADER_STRING BOOTLOADER
