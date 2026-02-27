@@ -699,6 +699,8 @@ _ext2_foreach_block:	;  indirect block pointer in eax
 	push esi
 	push eax
 	push edx
+	push ebx
+	push ecx
 	push eax
 	push ecx
 	mov cl,[cs:ext2.log_block_size]
@@ -710,12 +712,14 @@ _ext2_foreach_block:	;  indirect block pointer in eax
 	pop ecx
 	cmp ebx,edx
 	jb .start
-	ja .sub
+	ja .gt
 	cmp ecx,eax
 	jna .start
-.sub	sub ecx,eax
-	sbb ebx,edx
+.gt	mov ecx,eax
+	mov ebx,edx
 .start	pop eax
+	sub [ss:esp],ecx
+	sbb [ss:esp+4],ebx
 	push eax
 	movzx edx,WORD [cs:ext2.block_bytes_rem]
 	mul edx
@@ -728,11 +732,11 @@ _ext2_foreach_block:	;  indirect block pointer in eax
 	mul edx
 	add eax,ebp
 	adc edx,0
+	pop bp
 	jc .err
 	add eax,[cs:ext2.start_LBA]
 	adc edx,0
 	jc .err
-	pop bp
 .loop	shl esi,16
 	mov si,bp
 	call _load_dword_from_LBA
@@ -763,12 +767,12 @@ _ext2_foreach_block:	;  indirect block pointer in eax
 .cont	mov bp,si
 	shr esi,16
 	add bp,4
-	jnc .noc
+	jnc .nc
 	sub bp,[cs:bytes_per_sect]
 	add eax,1
 	adc edx,0
 	jc .err
-.noc	sub ecx,1
+.nc	sub ecx,1
 	sbb ebx,0
 	call .is_zero
 	jnz .loop
@@ -776,7 +780,11 @@ _ext2_foreach_block:	;  indirect block pointer in eax
 	clc
 	jmp .exit
 .err	stc
-.exit	pop edx
+.exit	pop eax
+	pop edx
+	add ecx,eax
+	adc ebx,edx
+	pop edx
 	pop eax
 	pop esi
 	ret
