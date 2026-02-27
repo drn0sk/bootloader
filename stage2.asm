@@ -95,7 +95,7 @@ load:
 	call get_file_size	; returns file size in eax
 	jnc .chk_sz
 	test bp,bp
-	jnz .exit_error
+	jnz exit_error
 	mov bp,file_not_found_msg
 	mov ecx,file_not_found_msg_len
 	call print
