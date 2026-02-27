@@ -13,7 +13,7 @@ print:			; es:bp -> string
 .loop	mov al,[es:bp]
 	int 0x10
 	inc bp
-	loop DWORD .loop
+	loop .loop,ecx
 .exit	pop ecx
 	pop bx
 	pop ax
