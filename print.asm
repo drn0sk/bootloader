@@ -42,7 +42,7 @@ print_newline:
 	mov cx,.newline_len
 	jmp _print_small
 .newline	db	0xa,0xd
-.newline_len	equ	$-newline
+.newline_len	equ	$-.newline
 
 ; PRINT
 %endif
